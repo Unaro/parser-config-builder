@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "dev": "vite build --mode development && echo Build complete;",
+    "type-check": "tsc --noEmit",
+    "build": "tsc && vite build"
+  }
+}

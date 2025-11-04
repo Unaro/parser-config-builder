@@ -19,6 +19,17 @@
     "service_worker": "background.js"
   },
   
+  "commands": {
+    "toggle-extension": {
+      "suggested_key": { "default": "Ctrl+Shift+Y" },
+      "description": "Toggle extension active state"
+    },
+    "quick-select": {
+      "suggested_key": { "default": "Ctrl+Shift+E" },
+      "description": "Start quick element selection"
+    }
+  },
+  
   "content_scripts": [{
     "matches": ["<all_urls>"],
     "js": ["content-script.js"],
