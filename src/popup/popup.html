@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parser Config Builder</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app" class="popup-container">
+    <!-- Заголовок -->
+    <header class="popup-header">
+      <div class="popup-logo">
+        <span class="popup-icon">🛠️</span>
+        <h1 class="popup-title">Parser Builder</h1>
+      </div>
+      <div class="popup-version">v1.0.0</div>
+    </header>
+
+    <!-- Основной контент -->
+    <main class="popup-main">
+      <!-- Информация о сайте -->
+      <section class="site-info">
+        <div class="site-info__row">
+          <span class="site-info__label">Сайт:</span>
+          <span class="site-info__value" id="site-domain">-</span>
+        </div>
+        <div class="site-info__row">
+          <span class="site-info__label">Статус:</span>
+          <span class="site-info__value" id="site-status">
+            <span class="status-indicator status-indicator--inactive"></span>
+            Неактивно
+          </span>
+        </div>
+      </section>
+
+      <!-- Основные кнопки -->
+      <section class="popup-actions">
+        <button id="toggle-btn" class="btn btn--primary btn--large" disabled>
+          <span class="btn-icon">🚀</span>
+          Активировать
+        </button>
+        
+        <button id="quick-select-btn" class="btn btn--secondary" disabled>
+          <span class="btn-icon">🎯</span>
+          Быстрый выбор
+        </button>
+      </section>
+
+      <!-- Конфиги -->
+      <section class="configs-section">
+        <h3 class="section-title">Конфигурации</h3>
+        
+        <div class="configs-list" id="configs-list">
+          <div class="empty-state">
+            <span class="empty-state__icon">📁</span>
+            <p class="empty-state__text">Конфиги не найдены</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Подвал -->
+    <footer class="popup-footer">
+      <div class="footer-links">
+        <button id="settings-btn" class="footer-link">
+          <span class="footer-link__icon">⚙️</span>
+          Настройки
+        </button>
+        
+        <button id="help-btn" class="footer-link">
+          <span class="footer-link__icon">❓</span>
+          Помощь
+        </button>
+      </div>
+    </footer>
+    
+    <!-- Лоадер -->
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p>Загрузка...</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
