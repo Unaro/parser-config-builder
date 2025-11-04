@@ -1,5 +1,5 @@
 /**
- * Config Sidebar - боковая панель управления конфигурацией (полное UI)
+ * Config Sidebar - боковая панель управления конфигурацией (с Schema Editor)
  */
 
 import type { 
@@ -9,6 +9,7 @@ import type {
   TestResult 
 } from '@/types';
 import type { SelectorConfig } from '@/types/selector';
+import type { SchemaField } from '@/types/schema';
 import { SidebarUIMethods } from './config-sidebar-methods';
 import {
   getPageTypeLabel,
@@ -250,7 +251,7 @@ export class ConfigSidebar {
             gap: 8px;
             transition: transform 0.2s, box-shadow 0.2s;
             box-shadow: 0 2px 4px rgba(255, 77, 79, 0.3);
-          " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(255, 77, 79, 0.4)'" onmouseout="this.style.transform=''; this.style.boxShadow='0 2px 4px rgba(255, 77, 79, 0.3)'">
+          " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 8px rgba(255, 77, 79, 0.4)'" onmouseout="this.style.transform=''; this.style.boxShadow='0 2px 4px rgba(255, 77, 79, 0.3)'" title="Остановить текущий режим выбора элементов">
             ⏹️ Остановить
           </button>
         </div>
@@ -453,14 +454,312 @@ export class ConfigSidebar {
     `;
   }
 
-  // === Плейсхолдеры для остальных секций ===
+  // === Schema Editor ===
   
   private renderSchemaEditor(): string {
-    return '<div style="padding: 20px;">Schema Editor будет добавлен в следующем коммите</div>';
+    const config = this.currentConfig!;
+    const fields = config.schema.fields;
+    
+    return `
+      <div class="pcb-content" style="flex: 1; padding: 20px; background: white;">
+        <!-- Навигация -->
+        <div class="pcb-section-tabs" style="
+          display: flex;
+          border-bottom: 2px solid #f0f0f0;
+          margin-bottom: 24px;
+          gap: 4px;
+        ">
+          <button class="pcb-tab" data-section="main" style="
+            padding: 12px 20px;
+            background: #f8f9fa;
+            color: #666;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          " onmouseover="this.style.backgroundColor='#e6f7ff'; this.style.color='#1890ff'" onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.color='#666'">ℹ️ Обзор</button>
+          
+          <button class="pcb-tab active" data-section="schema" style="
+            padding: 12px 20px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+            top: 2px;
+          ">
+            📄 Схема (${fields.length})
+          </button>
+        </div>
+        
+        <!-- Панель управления схемой -->
+        <div style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 16px;
+          background: #fafafa;
+          border-radius: 8px;
+          border: 1px solid #f0f0f0;
+        ">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-weight: 600; color: #333;">Поля схемы:</span>
+            <span style="color: #1890ff; font-weight: 600;">${fields.length} полей</span>
+          </div>
+          <button id="pcb-add-field" style="
+            background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.2s;
+          " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform=''">
+            ➕ Добавить поле
+          </button>
+        </div>
+        
+        <!-- Список полей -->
+        <div class="pcb-fields-list" id="pcb-fields-list">
+          ${fields.length === 0 ? this.renderEmptyFieldsState() : fields.map((field, index) => this.renderFieldCard(field, index)).join('')}
+        </div>
+      </div>
+    `;
   }
   
+  private renderEmptyFieldsState(): string {
+    return `
+      <div style="
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
+        background: #fafafa;
+        border-radius: 12px;
+        border: 2px dashed #e8e8e8;
+      ">
+        <div style="font-size: 64px; margin-bottom: 20px; opacity: 0.3;">📄</div>
+        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Поля схемы отсутствуют</div>
+        <div style="font-size: 14px; color: #666; margin-bottom: 20px;">Добавьте первое поле, чтобы начать конфигурирование</div>
+        <button id="pcb-add-first-field" style="
+          background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+          color: white;
+          border: none;
+          padding: 14px 24px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          transition: transform 0.2s;
+        " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform=''">
+          ➕ Добавить первое поле
+        </button>
+      </div>
+    `;
+  }
+  
+  private renderFieldCard(field: SchemaField, index: number): string {
+    const config = this.currentConfig!;
+    const hasSelector = config.selectors[field.name];
+    const selectorStatus = hasSelector ? '✅ Привязан' : '⚪ Не привязан';
+    const selectorColor = hasSelector ? '#52c41a' : '#d9d9d9';
+    
+    return `
+      <div class="pcb-field-card" data-field-name="${field.name}" style="
+        background: white;
+        border: 2px solid #f0f0f0;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: all 0.2s;
+        cursor: pointer;
+        position: relative;
+      " onmouseover="this.style.borderColor='#1890ff'; this.style.boxShadow='0 4px 12px rgba(24, 144, 255, 0.1)'" onmouseout="this.style.borderColor='#f0f0f0'; this.style.boxShadow=''">
+        
+        <!-- Основная информация -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span style="font-size: 16px; font-weight: 600; color: #333;">${field.name}</span>
+              ${field.required ? '<span style="color: #ff4d4f; font-size: 12px; font-weight: 600;">*</span>' : ''}
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 12px; font-size: 13px;">
+              <span style="
+                background: #f0f0f0;
+                color: #666;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-weight: 600;
+              ">${field.type}</span>
+              
+              <span style="color: ${selectorColor}; font-weight: 600;">${selectorStatus}</span>
+            </div>
+            
+            ${field.description ? `
+              <div style="color: #999; font-size: 12px; margin-top: 6px; font-style: italic;">
+                ${field.description}
+              </div>
+            ` : ''}
+          </div>
+          
+          <!-- Меню действий -->
+          <div class="pcb-field-menu" style="display: flex; align-items: center; gap: 4px;">
+            <button class="pcb-field-action" data-action="bind" data-field="${field.name}" style="
+              background: ${hasSelector ? '#52c41a' : '#1890ff'};
+              color: white;
+              border: none;
+              width: 32px;
+              height: 32px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              transition: transform 0.2s;
+            " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform=''" title="${hasSelector ? 'Редактировать селектор' : 'Привязать селектор'}">
+              ${hasSelector ? '⚙️' : '🎯'}
+            </button>
+            
+            <button class="pcb-field-action" data-action="edit" data-field="${field.name}" style="
+              background: #faad14;
+              color: white;
+              border: none;
+              width: 32px;
+              height: 32px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              transition: transform 0.2s;
+            " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform=''" title="Редактировать поле">
+              ✏️
+            </button>
+            
+            <button class="pcb-field-action" data-action="delete" data-field="${field.name}" style="
+              background: #ff4d4f;
+              color: white;
+              border: none;
+              width: 32px;
+              height: 32px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              transition: transform 0.2s;
+            " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform=''" title="Удалить поле">
+              🗑️
+            </button>
+          </div>
+        </div>
+        
+        <!-- Предпросмотр селектора -->
+        ${hasSelector ? `
+          <div style="
+            font-size: 11px;
+            color: #666;
+            background: #f8f9fa;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            border-left: 3px solid ${selectorColor};
+            margin-top: 8px;
+            word-break: break-all;
+          ">
+            ${(config.selectors[field.name] as any)?.primary?.substring(0, 60) || 'selector'}${((config.selectors[field.name] as any)?.primary?.length || 0) > 60 ? '...' : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+  
+  // === Selector Editor (placeholder) ===
+  
   private renderSelectorEditor(): string {
-    return '<div style="padding: 20px;">Selector Editor будет добавлен в следующем коммите</div>';
+    const fieldName = this.selectedField!;
+    const config = this.currentConfig!;
+    const field = config.schema.fields.find(f => f.name === fieldName);
+    
+    if (!field) {
+      return '<div style="padding: 20px; color: #ff4d4f;">Поле не найдено</div>';
+    }
+    
+    return `
+      <div class="pcb-content" style="flex: 1; padding: 20px; background: white;">
+        <!-- Навигация -->
+        <div class="pcb-section-tabs" style="
+          display: flex;
+          border-bottom: 2px solid #f0f0f0;
+          margin-bottom: 24px;
+          gap: 4px;
+        ">
+          <button class="pcb-tab" data-section="main" style="
+            padding: 12px 20px;
+            background: #f8f9fa;
+            color: #666;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          " onmouseover="this.style.backgroundColor='#e6f7ff'; this.style.color='#1890ff'" onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.color='#666'">ℹ️ Обзор</button>
+          
+          <button class="pcb-tab" data-section="schema" style="
+            padding: 12px 20px;
+            background: #f8f9fa;
+            color: #666;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          " onmouseover="this.style.backgroundColor='#e6f7ff'; this.style.color='#1890ff'" onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.color='#666'">
+            📄 Схема (${config.schema.fields.length})
+          </button>
+          
+          <button class="pcb-tab active" data-section="selector" style="
+            padding: 12px 20px;
+            background: #722ed1;
+            color: white;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+            top: 2px;
+          ">
+            🎯 Селектор: ${fieldName}
+          </button>
+        </div>
+        
+        <div style="padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: center;">
+          <div style="font-size: 48px; margin-bottom: 16px;">🔧</div>
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Selector Editor</div>
+          <div style="color: #666;">[Будет добавлен в следующем коммите]</div>
+        </div>
+      </div>
+    `;
   }
 
   private renderFooter(): string {
@@ -510,14 +809,17 @@ export class ConfigSidebar {
     `;
     
     // Добавляем анимацию
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideInRight {
-        from { transform: translateX(100%); }
-        to { transform: translateX(0); }
-      }
-    `;
-    document.head.appendChild(style);
+    if (!document.getElementById('pcb-sidebar-animations')) {
+      const style = document.createElement('style');
+      style.id = 'pcb-sidebar-animations';
+      style.textContent = `
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
 
     document.body.appendChild(this.sidebarElement);
     this.updateSidebarContent();
@@ -530,6 +832,7 @@ export class ConfigSidebar {
     this.bindControlPanelEvents();
     this.bindTabEvents();
     this.bindMainSectionEvents();
+    this.bindSchemaEditorEvents();
   }
 
   private bindControlPanelEvents(): void {
@@ -572,6 +875,54 @@ export class ConfigSidebar {
         this.updateHistoryDisplay();
       });
     }
+  }
+  
+  private bindSchemaEditorEvents(): void {
+    // Кнопка "Добавить поле"
+    const addFieldBtn = this.sidebarElement!.querySelector('#pcb-add-field, #pcb-add-first-field');
+    if (addFieldBtn) {
+      addFieldBtn.addEventListener('click', () => this.showAddFieldDialog());
+    }
+    
+    // Действия над полями
+    const fieldActions = this.sidebarElement!.querySelectorAll('.pcb-field-action');
+    fieldActions.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = (e.target as HTMLElement).getAttribute('data-action');
+        const fieldName = (e.target as HTMLElement).getAttribute('data-field');
+        if (!fieldName || !action) return;
+        
+        switch (action) {
+          case 'bind':
+            this.startFieldSelection(fieldName);
+            break;
+          case 'edit':
+            this.showEditFieldDialog(fieldName);
+            break;
+          case 'delete':
+            this.deleteField(fieldName);
+            break;
+        }
+      });
+    });
+    
+    // Клик по карточке поля
+    const fieldCards = this.sidebarElement!.querySelectorAll('.pcb-field-card');
+    fieldCards.forEach(card => {
+      card.addEventListener('click', (e) => {
+        const fieldName = (e.currentTarget as HTMLElement).getAttribute('data-field-name');
+        if (fieldName && !this.currentConfig?.selectors[fieldName]) {
+          // Если селектор не привязан - запускаем выбор
+          this.startFieldSelection(fieldName);
+        } else if (fieldName) {
+          // Если привязан - открываем редактор
+          this.openSelectorEditor(fieldName);
+        }
+      });
+    });
+    
+    // Клик по элементам истории
     const historyItems = this.sidebarElement!.querySelectorAll('.pcb-history-item');
     historyItems.forEach((item: Element) => {
       item.addEventListener('click', (e: Event) => {
@@ -585,4 +936,9 @@ export class ConfigSidebar {
   private showFieldSelectionPrompt() { if (!this.currentConfig) return; SidebarUIMethods.showFieldSelectionPrompt(this.currentConfig, this.onMessage); }
   private exportConfig() { if (!this.currentConfig) return; SidebarUIMethods.exportConfig(this.currentConfig); }
   private updateHistoryDisplay() { if (!this.sidebarElement) return; const list = this.sidebarElement.querySelector('#pcb-history-list'); if (!list) return; list.innerHTML = this.selectionHistory.map((m: ElementSelectedMessage) => SidebarUIMethods.renderHistoryItem(m)).join(''); const historyItems = this.sidebarElement!.querySelectorAll('.pcb-history-item'); historyItems.forEach((item: Element) => { item.addEventListener('click', (e: Event) => { const fieldName = (e.currentTarget as HTMLElement).getAttribute('data-field-name'); if (fieldName) this.openSelectorEditor(fieldName); }); }); }
+  
+  private showAddFieldDialog() { if (!this.currentConfig) return; SidebarUIMethods.showAddFieldDialog(this.currentConfig, this.onMessage); }
+  private showEditFieldDialog(fieldName: string) { if (!this.currentConfig) return; SidebarUIMethods.showEditFieldDialog(this.currentConfig, fieldName, this.onMessage); }
+  private startFieldSelection(fieldName: string) { if (!this.currentConfig) return; const field = this.currentConfig.schema.fields.find((f: any) => f.name === fieldName); if (!field) return; SidebarUIMethods.startFieldSelection(fieldName, field.type, this.onMessage); this.selectedField = fieldName; this.currentSection = 'selector'; this.updateSidebarContent(); }
+  private deleteField(fieldName: string) { if (this.currentConfig) SidebarUIMethods.deleteField(this.currentConfig, fieldName, this.onMessage); }
 }
