@@ -40,6 +40,14 @@ export interface ValidationRule {
 }
 
 /**
+ * Пост-обработчики
+ */
+export interface PostProcessor {
+  type: 'trim' | 'lowercase' | 'uppercase' | 'replace' | 'parse' | 'transform';
+  config?: Record<string, unknown>;
+}
+
+/**
  * Метаданные селектора
  */
 export interface SelectorMetadata {
