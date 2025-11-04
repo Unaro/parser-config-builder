@@ -4,9 +4,7 @@
 
 import type { 
   ParserConfig, 
-  PageType, 
-  PlatformInfo,
-  DataSchema,
+  PageType,
   SchemaField,
   ExportConfig 
 } from '@/types';
@@ -96,13 +94,15 @@ export function exportConfigAsJSON(
   options: ExportConfig = { format: 'json', minify: false, includeMetadata: true, includeFallbacks: true }
 ): string {
   // Создаем копию конфига для экспорта
-  const exportConfig = { ...config };
+  const exportConfig: ParserConfig = JSON.parse(JSON.stringify(config));
   
   // Убираем метаданные если не нужны
   if (!options.includeMetadata) {
-    delete exportConfig.metadata;
-    if (exportConfig.schema?.metadata) {
-      delete exportConfig.schema.metadata;
+    if ('metadata' in exportConfig) {
+      (exportConfig as any).metadata = undefined;
+    }
+    if (exportConfig.schema && 'metadata' in exportConfig.schema) {
+      (exportConfig.schema as any).metadata = undefined;
     }
   }
   
@@ -110,7 +110,7 @@ export function exportConfigAsJSON(
   if (!options.includeFallbacks) {
     for (const selector of Object.values(exportConfig.selectors)) {
       if ('fallback' in selector) {
-        delete (selector as any).fallback;
+        (selector as any).fallback = undefined;
       }
     }
   }
