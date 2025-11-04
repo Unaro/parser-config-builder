@@ -2,11 +2,10 @@
  * Popup UI Script - интерфейс всплывающего окна расширения
  */
 
-import type { ExtensionMessage, ParserConfig } from '@/types';
+import type { ExtensionMessage } from '@/types';
 import { sendMessageToContentScript } from '@/utils/messaging';
 
 class PopupUI {
-  private currentConfig: ParserConfig | null = null;
   private isExtensionActive = false;
 
   constructor() {
@@ -58,9 +57,6 @@ class PopupUI {
       // Проверяем состояние расширения
       await this.checkExtensionStatus();
       
-      // Загружаем конфиги
-      await this.loadConfigs();
-      
     } catch (error) {
       console.error('Failed to initialize popup UI:', error);
       this.showError('Ошибка инициализации');
@@ -108,50 +104,6 @@ class PopupUI {
   private async checkExtensionStatus(): Promise<void> {
     // TODO: Проверка через background script
     console.log('Checking extension status...');
-  }
-
-  /**
-   * Загрузить конфиги
-   */
-  private async loadConfigs(): Promise<void> {
-    try {
-      const configs = await chrome.storage.local.get();
-      const configsList = document.getElementById('configs-list');
-      
-      if (!configsList) return;
-      
-      const parserConfigs = Object.entries(configs)
-        .filter(([key]) => key.startsWith('config_'))
-        .map(([, value]) => value as ParserConfig);
-        
-      if (parserConfigs.length === 0) {
-        configsList.innerHTML = `
-          <div class="empty-state">
-            <span class="empty-state__icon">📁</span>
-            <p class="empty-state__text">Конфиги не найдены</p>
-          </div>
-        `;
-        return;
-      }
-      
-      // Отображаем конфиги
-      configsList.innerHTML = parserConfigs.map(config => `
-        <div class="config-item" data-config-id="${config.id}">
-          <div class="config-item__info">
-            <div class="config-item__name">${config.platform.name}</div>
-            <div class="config-item__meta">${config.pageType} • v${config.metadata.version}</div>
-          </div>
-          <div class="config-item__actions">
-            <button class="config-item__action" data-action="edit">✏️</button>
-            <button class="config-item__action" data-action="test">🧪</button>
-            <button class="config-item__action" data-action="export">📤</button>
-          </div>
-        </div>
-      `).join('');
-      
-    } catch (error) {
-      console.error('Failed to load configs:', error);
-    }
   }
 
   /**
