@@ -39,7 +39,7 @@ export class SidebarUIMethods {
     const fieldName = prompt(
       `Выберите поле для выделения:\n\n` +
       fields.map((f, i) => `${i + 1}. ${f.name} (${f.type})`).join('\n'),
-      fields[0].name
+      fields[0]?.name ?? 'field'
     );
     
     if (!fieldName) return;
@@ -241,7 +241,6 @@ export class SidebarUIMethods {
       return;
     }
     
-    // Проверяем fallback селекторы
     const invalidFallbacks = selectorConfig.fallback.filter(fb => !isValidSelector(fb));
     if (invalidFallbacks.length > 0) {
       alert(`Невалидные fallback селекторы: ${invalidFallbacks.join(', ')}`);
@@ -361,7 +360,6 @@ export class SidebarUIMethods {
     notification.textContent = text;
     document.body.appendChild(notification);
 
-    // Удаляем через 4 секунды
     setTimeout(() => {
       if (notification.parentNode) {
         notification.remove();
