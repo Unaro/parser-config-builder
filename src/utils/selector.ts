@@ -38,8 +38,16 @@ export function generateSelectors(element: Element): GeneratedSelector[] {
   return dedupe(list).sort((a,b)=> (b.confidence - a.confidence) || (a.selector.length - b.selector.length));
 }
 
+export function validateSelector(selector: string): boolean {
+  try { document.querySelector(selector); return true; } catch { return false; }
+}
+
+export function queryCount(selector: string): number {
+  try { return document.querySelectorAll(selector).length; } catch { return 0; }
+}
+
 function pack(selector: string, strategy: SelectorStrategy, confidence: number): GeneratedSelector {
-  return { selector, strategy, confidence, uniqueness: uniqueness(selector), stability: stability(strategy), element: document.querySelector(selector) as Element };
+  return { selector, strategy, confidence, uniqueness: uniqueness(selector), stability: stability(strategy), element: null as unknown as Element };
 }
 
 function isUnique(sel: string): boolean { try { return document.querySelectorAll(sel).length === 1; } catch { return false; } }
