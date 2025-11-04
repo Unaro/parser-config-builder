@@ -2,7 +2,7 @@
  * Popup UI Script - интерфейс всплывающего окна расширения
  */
 
-import type { ExtensionMessage, MessageResponse, ParserConfig } from '@/types';
+import type { ExtensionMessage, ParserConfig } from '@/types';
 import { sendMessageToContentScript } from '@/utils/messaging';
 
 class PopupUI {
@@ -52,7 +52,7 @@ class PopupUI {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
       if (tab?.url) {
-        this.updateSiteInfo(tab.url, tab.title ?? 'Неизвестно');
+        this.updateSiteInfo(tab.url);
       }
 
       // Проверяем состояние расширения
@@ -70,7 +70,7 @@ class PopupUI {
   /**
    * Обновить информацию о сайте
    */
-  private updateSiteInfo(url: string, title: string): void {
+  private updateSiteInfo(url: string): void {
     const domain = new URL(url).hostname;
     const domainElement = document.getElementById('site-domain');
     const statusElement = document.getElementById('site-status');
@@ -81,8 +81,6 @@ class PopupUI {
     
     const isSupported = this.isSiteSupported(url);
     if (statusElement) {
-      const indicator = statusElement.querySelector('.status-indicator');
-      
       if (isSupported) {
         statusElement.innerHTML = `
           <span class="status-indicator status-indicator--active"></span>
