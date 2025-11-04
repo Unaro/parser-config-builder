@@ -16,7 +16,8 @@ const STRATEGY_PRIORITY: SelectorStrategy[] = [
   'tag',
   'xpath',
   'position',
-  'text-content'
+  'text-content',
+  'manual'
 ];
 
 /**
@@ -27,6 +28,7 @@ export function generateSelectors(element: Element): GeneratedSelector[] {
   
   // Пробуем все стратегии
   for (const strategy of STRATEGY_PRIORITY) {
+    if (strategy === 'manual') continue; // Пропускаем ручной ввод
     const selector = generateSelectorByStrategy(element, strategy);
     if (selector) {
       selectors.push(selector);
@@ -87,6 +89,10 @@ function generateSelectorByStrategy(
       selector = generateTextContentSelector(element);
       confidence = selector ? 0.35 : 0;
       break;
+      
+    case 'manual':
+      // Мануальные селекторы не генерируются
+      return null;
   }
   
   if (!selector) return null;
@@ -209,7 +215,8 @@ function calculateStability(strategy: SelectorStrategy): number {
     'tag': 0.50,
     'xpath': 0.40,
     'position': 0.30,
-    'text-content': 0.25
+    'text-content': 0.25,
+    'manual': 0.60
   };
   
   return stabilityMap[strategy] ?? 0;
