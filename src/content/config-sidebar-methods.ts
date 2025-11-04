@@ -1,5 +1,5 @@
 /**
- * Config Sidebar Methods - ВОССТАНОВЛЕННАЯ ПОЛНАЯ ВЕРСИЯ с интегрированным модальным диалогом
+ * Config Sidebar Methods - ВОССТАНОВЛЕННАЯ ПОЛНАЯ ВЕРСИЯ с интегрированным модальным диалогом + DEBUG/NOTIFICATION
  */
 
 import type { 
@@ -60,9 +60,9 @@ export class SidebarUIMethods {
   }
   
   /**
-   * НОВЫЙ МОДАЛЬНЫЙ диалог добавления поля с человекопонятными типами
+   * НОВЫЙ МОДАЛЬНЫЙ диалог добавления поля с человекопонятными типами + ASYNC + DEBUG
    */
-  static showAddFieldDialog(config: ParserConfig, onMessage: (message: any)=>void): void {
+  static async showAddFieldDialog(config: ParserConfig, onMessage: (message: any)=>Promise<any>): Promise<void> {
     const existingNames = config.schema.fields.map(f => f.name);
     
     const overlay = document.createElement('div');
@@ -158,21 +158,54 @@ export class SidebarUIMethods {
     modal.querySelector('#pcb-cancel-add')?.addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
-    modal.querySelector('#pcb-save-add')?.addEventListener('click', () => {
+    modal.querySelector('#pcb-save-add')?.addEventListener('click', async () => {
       const name = nameInput.value.trim();
-      if (!name) { alert('Введите название поля'); nameInput.focus(); return; }
-      if (existingNames.includes(name)) { alert('Поле с таким названием уже существует'); nameInput.focus(); return; }
+      console.log('🎯 ADD FIELD CLICK:', { name, selectedType, existingNames });
+      
+      if (!name) { 
+        alert('Введите название поля'); 
+        nameInput.focus(); 
+        return; 
+      }
+      if (existingNames.includes(name)) { 
+        alert('Поле с таким названием уже существует'); 
+        nameInput.focus(); 
+        return; 
+      }
       
       const description = descInput.value.trim();
       const attribute = selectedType === 'attribute' ? (attrInput.value.trim() || 'href') : undefined;
 
-      onMessage({
-        type: 'CREATE_FIELD',
-        field: { name, type: selectedType, description, required: false, ...(attribute ? { attribute } : {}) },
-        id: `sidebar_${Date.now()}`,
-        timestamp: Date.now()
-      });
-      close();
+      const fieldData = { 
+        name, 
+        type: selectedType, 
+        description, 
+        required: false, 
+        ...(attribute ? { attribute } : {}) 
+      };
+
+      console.log('🚀 SENDING CREATE_FIELD:', fieldData);
+
+      try {
+        const response = await onMessage({
+          type: 'CREATE_FIELD',
+          field: fieldData,
+          id: `sidebar_${Date.now()}`,
+          timestamp: Date.now()
+        });
+        
+        console.log('✅ CREATE_FIELD RESPONSE:', response);
+        
+        if (response?.success) {
+          SidebarUIMethods.showNotification(`Поле "${name}" создано`, 'success');
+          close();
+        } else {
+          SidebarUIMethods.showNotification(`Ошибка: ${response?.error || 'неизвестная ошибка'}`, 'error');
+        }
+      } catch (error) {
+        console.error('❌ CREATE_FIELD ERROR:', error);
+        SidebarUIMethods.showNotification(`Ошибка: ${(error as Error).message}`, 'error');
+      }
     });
 
     // Focus на первое поле
