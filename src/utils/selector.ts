@@ -3,7 +3,7 @@
  */
 
 import type { GeneratedSelector, SelectorStrategy } from '@/types';
-import { getElementAttributes, getElementXPath, getElementCSSPath } from './dom';
+import { getElementAttributes, getElementXPath } from './dom';
 
 /**
  * Приоритеты стратегий (от наиболее стабильных к менее)
