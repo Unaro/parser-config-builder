@@ -1,5 +1,5 @@
 /**
- * Сообщения между компонентами расширения (расширенная версия с GET_STATUS/TOGGLE_ACTIVE)
+ * Сообщения между компонентами расширения
  */
 
 import type { ParserConfig, TestResult, PageType } from './config';
@@ -167,14 +167,6 @@ export interface TestConfigMessage extends BaseMessage {
 }
 
 /**
- * Завершение теста
- */
-export interface TestCompleteMessage extends BaseMessage {
-  type: 'TEST_COMPLETE';
-  results: TestResult[];
-}
-
-/**
  * Подсветка элемента
  */
 export interface HighlightElementMessage extends BaseMessage {
@@ -222,7 +214,6 @@ export type ExtensionMessage =
   | UpdateSelectorMessage
   | UpdatePageTypeMessage
   | TestConfigMessage
-  | TestCompleteMessage
   | HighlightElementMessage
   | GetTabInfoMessage
   | UpdateBadgeMessage
@@ -237,7 +228,7 @@ export type MessageHandler<T extends BaseMessage = BaseMessage> = (
 ) => Promise<MessageResponse> | MessageResponse;
 
 /**
- * Создать базовое сообщение с правильной типизацией
+ * Создать базовое сообщение
  */
 export function createBaseMessage<T extends ExtensionMessage['type']>(
   type: T
