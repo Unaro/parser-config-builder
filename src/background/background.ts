@@ -5,10 +5,6 @@
 import type { 
   ExtensionMessage, 
   MessageResponse,
-  ActivateExtensionMessage,
-  DeactivateExtensionMessage,
-  StartSelectionMessage,
-  GetTabInfoMessage,
   UpdateBadgeMessage,
   StoreTempDataMessage,
   GetTempDataMessage
