@@ -3,7 +3,7 @@
  */
 
 import type { ParserConfig, TestResult } from './config';
-import type { GeneratedSelector } from './selector';
+import type { GeneratedSelector, SelectorConfig } from './selector';
 import type { DataSchema } from './schema';
 
 /**
@@ -90,7 +90,9 @@ export type SidebarMessage =
   | StopSelectionMessage
   | TestConfigMessage
   | UpdateSchemaMessage
-  | HighlightElementMessage;
+  | UpdateSelectorMessage
+  | HighlightElementMessage
+  | UpdatePageTypeMessage;
 
 export interface StartSelectionMessage extends BaseMessage {
   type: 'START_SELECTION';
@@ -110,6 +112,17 @@ export interface TestConfigMessage extends BaseMessage {
 export interface UpdateSchemaMessage extends BaseMessage {
   type: 'UPDATE_SCHEMA';
   schema: DataSchema;
+}
+
+export interface UpdateSelectorMessage extends BaseMessage {
+  type: 'UPDATE_SELECTOR';
+  fieldName: string;
+  selectorConfig: SelectorConfig;
+}
+
+export interface UpdatePageTypeMessage extends BaseMessage {
+  type: 'UPDATE_PAGE_TYPE';
+  pageType: string;
 }
 
 export interface HighlightElementMessage extends BaseMessage {
