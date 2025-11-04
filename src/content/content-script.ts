@@ -1,5 +1,5 @@
 /**
- * Content Script - основной компонент для взаимодействия с DOM
+ * Content Script - основной компонент для взаимодействия с DOM (deduped)
  */
 
 import './content-styles.css';
@@ -27,11 +27,8 @@ class ParserConfigContentScript {
 
   constructor() {
     this.elementSelector = new ElementSelector();
-    this.configSidebar = new ConfigSidebar(async (msg: ExtensionMessage) => {
-      return this.handleMessage(msg);
-    });
-    
-    // Дожидаемся готовности DOM перед инжекцией стилей
+    this.configSidebar = new ConfigSidebar(async (msg: ExtensionMessage) => this.handleMessage(msg));
+
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => this.initialize());
     } else {
@@ -43,13 +40,9 @@ class ParserConfigContentScript {
     this.setupMessageListeners();
     this.setupElementSelector();
     this.injectStylesSafely();
-    
     console.log('Parser Config Builder: Content Script loaded');
   }
 
-  /**
-   * Настройка слушателей сообщений
-   */
   private setupMessageListeners(): void {
     chrome.runtime.onMessage.addListener(
       (message: ExtensionMessage, _sender, sendResponse) => {
@@ -59,55 +52,41 @@ class ParserConfigContentScript {
             console.error('Message handling error:', error);
             sendResponse({ success: false, error: (error as Error).message });
           });
-        
-        return true; // Асинхронный ответ
+        return true;
       }
     );
   }
 
-  /**
-   * Обработка сообщений с type guards
-   */
   private async handleMessage(message: ExtensionMessage): Promise<MessageResponse> {
     switch (message.type) {
       case 'ACTIVATE_EXTENSION':
         return this.handleActivate(message as ActivateExtensionMessage);
-        
       case 'DEACTIVATE_EXTENSION':
         return this.handleDeactivate();
-        
       case 'START_SELECTION':
         return this.handleStartSelection(message as StartSelectionMessage);
-        
       case 'STOP_SELECTION':
         return this.handleStopSelection();
-        
       case 'TEST_CONFIG':
         return this.handleTestConfig(message as TestConfigMessage);
-        
       case 'HIGHLIGHT_ELEMENT':
         return this.handleHighlightElement(message as HighlightElementMessage);
-        
       case 'GET_CONFIG':
         return this.handleGetConfig();
-        
       case 'SAVE_CONFIG':
         return this.handleSaveConfig(message as SaveConfigMessage);
-
       case 'UPDATE_SCHEMA':
         return this.handleUpdateSchema((message as any));
-        
       case 'UPDATE_SELECTOR':
         return this.handleUpdateSelector((message as any));
-        
       case 'UPDATE_PAGE_TYPE':
         return this.handleUpdatePageType((message as any));
-        
       default:
         return { success: false, error: 'Unknown message type' };
     }
   }
 
+  // --- UPDATE handlers (single implementations) ---
   private async handleUpdateSchema(message: any): Promise<MessageResponse> {
     if (!this.currentConfig) return { success: false, error: 'Config not initialized' };
     this.currentConfig = { ...this.currentConfig, schema: message.schema };
@@ -133,26 +112,14 @@ class ParserConfigContentScript {
     return { success: true };
   }
 
-  /**
-   * Активация расширения
-   */
+  // --- Existing methods ---
   private async handleActivate(message: ActivateExtensionMessage): Promise<MessageResponse> {
-    if (this.isActive) {
-      return { success: true, data: 'Already active' };
-    }
-
+    if (this.isActive) return { success: true, data: 'Already active' };
     try {
       this.isActive = true;
-      
-      // Показываем боковую панель
       this.configSidebar.show();
-      
-      // Инициализируем конфиг для текущей страницы
       await this.initializeConfig(message.pageType);
-      
-      // Добавляем CSS классы для активации
       document.body.classList.add('pcb-active');
-      
       return { success: true, data: 'Extension activated' };
     } catch (error) {
       this.isActive = false;
@@ -160,87 +127,46 @@ class ParserConfigContentScript {
     }
   }
 
-  /**
-   * Деактивация расширения
-   */
   private async handleDeactivate(): Promise<MessageResponse> {
-    if (!this.isActive) {
-      return { success: true, data: 'Already inactive' };
-    }
-
+    if (!this.isActive) return { success: true, data: 'Already inactive' };
     this.isActive = false;
-    
-    // Останавливаем выделение элементов
     this.elementSelector.stopSelection();
-    
-    // Скрываем боковую панель
     this.configSidebar.hide();
-    
-    // Убираем все подсветки
     this.elementSelector.clearAllHighlights();
-    
-    // Убираем CSS классы
     document.body.classList.remove('pcb-active');
-    
     return { success: true, data: 'Extension deactivated' };
   }
 
-  /**
-   * Начало выделения элемента
-   */
   private async handleStartSelection(message: StartSelectionMessage): Promise<MessageResponse> {
-    if (!this.isActive) {
-      return { success: false, error: 'Extension not active' };
-    }
-
+    if (!this.isActive) return { success: false, error: 'Extension not active' };
     const { fieldName, fieldType } = message;
-    
     this.elementSelector.startSelection({
       fieldName,
       fieldType,
-      onElementSelected: (element, selector) => {
-        this.handleElementSelected(fieldName, element, selector);
-      },
-      onSelectionCancelled: () => {
-        this.configSidebar.notifySelectionCancelled(fieldName);
-      }
+      onElementSelected: (element, selector) => this.handleElementSelected(fieldName, element, selector),
+      onSelectionCancelled: () => this.configSidebar.notifySelectionCancelled(fieldName)
     });
-
     return { success: true, data: `Selection started for field: ${fieldName}` };
   }
 
-  /**
-   * Остановка выделения элемента
-   */
   private async handleStopSelection(): Promise<MessageResponse> {
     this.elementSelector.stopSelection();
     return { success: true, data: 'Selection stopped' };
   }
 
-  /**
-   * Тестирование конфига
-   */
   private async handleTestConfig(message: TestConfigMessage): Promise<MessageResponse> {
     const { config } = message;
-    
     try {
       const results = await this.testConfigOnPage(config);
-      
-      // Отправляем результаты в sidebar
       this.configSidebar.notifyTestResults(results);
-      
       return { success: true, data: results };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
   }
 
-  /**
-   * Подсветка элемента по селектору
-   */
   private async handleHighlightElement(message: HighlightElementMessage): Promise<MessageResponse> {
     const { selector } = message;
-    
     try {
       this.elementSelector.highlightBySelector(selector);
       return { success: true, data: 'Element highlighted' };
@@ -249,83 +175,26 @@ class ParserConfigContentScript {
     }
   }
 
-  /**
-   * Получение текущего конфига
-   */
   private async handleGetConfig(): Promise<MessageResponse> {
-    return { 
-      success: true, 
-      data: this.currentConfig ?? this.createDefaultConfig() 
-    };
+    return { success: true, data: this.currentConfig ?? this.createDefaultConfig() };
   }
 
-  /**
-   * Сохранение конфига
-   */
   private async handleSaveConfig(message: SaveConfigMessage): Promise<MessageResponse> {
     const { config } = message;
-    
     try {
-      // Валидируем конфиг
       const validation = await this.validateConfig(config);
-      if (!validation.valid) {
-        return { success: false, error: validation.errors.join(', ') };
-      }
-      
+      if (!validation.valid) return { success: false, error: validation.errors.join(', ') };
       this.currentConfig = config;
-      
-      // Сохраняем в storage
       await this.saveConfigToStorage(config);
-      
       return { success: true, data: 'Config saved' };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
   }
 
-  // === Новые обработчики ===
-  
-  private async handleUpdateSchema(message: any): Promise<MessageResponse> {
-    if (!this.currentConfig) return { success: false, error: 'Config not initialized' };
-    this.currentConfig = { ...this.currentConfig, schema: message.schema };
-    await this.saveConfigToStorage(this.currentConfig);
-    this.configSidebar.updateConfig(this.currentConfig);
-    return { success: true };
-  }
+  private setupElementSelector(): void { /* no-op */ }
 
-  private async handleUpdateSelector(message: any): Promise<MessageResponse> {
-    if (!this.currentConfig) return { success: false, error: 'Config not initialized' };
-    const selectors = { ...this.currentConfig.selectors, [message.fieldName]: message.selectorConfig };
-    this.currentConfig = { ...this.currentConfig, selectors };
-    await this.saveConfigToStorage(this.currentConfig);
-    this.configSidebar.updateConfig(this.currentConfig);
-    return { success: true };
-  }
-
-  private async handleUpdatePageType(message: any): Promise<MessageResponse> {
-    if (!this.currentConfig) return { success: false, error: 'Config not initialized' };
-    this.currentConfig = { ...this.currentConfig, pageType: message.pageType } as ParserConfig;
-    await this.saveConfigToStorage(this.currentConfig);
-    this.configSidebar.updateConfig(this.currentConfig);
-    return { success: true };
-  }
-
-  /**
-   * Настройка element selector
-   */
-  private setupElementSelector(): void {
-    // Уже настроено в конструкторе ElementSelector
-  }
-
-  /**
-   * Обработчик выделенного элемента
-   */
-  private handleElementSelected(
-    fieldName: string, 
-    element: Element, 
-    selector: any
-  ): void {
-    // Создаем сообщение для sidebar
+  private handleElementSelected(fieldName: string, element: Element, selector: any): void {
     const message: ElementSelectedMessage = {
       type: 'ELEMENT_SELECTED',
       id: generateUniqueId(),
@@ -339,34 +208,16 @@ class ParserConfigContentScript {
       },
       selector
     };
-    
-    // Отправляем в sidebar
     this.configSidebar.notifyElementSelected(message);
   }
 
-  /**
-   * Инициализация конфига для страницы
-   */
   private async initializeConfig(pageType?: string): Promise<void> {
     const domain = window.location.hostname;
-    
-    // Пытаемся загрузить существующий конфиг
     const existingConfig = await this.loadConfigFromStorage(domain);
-    
-    if (existingConfig) {
-      this.currentConfig = existingConfig;
-    } else {
-      // Создаем новый конфиг
-      this.currentConfig = this.createDefaultConfig(domain, pageType);
-    }
-    
-    // Отправляем конфиг в sidebar
+    this.currentConfig = existingConfig ?? this.createDefaultConfig(domain, pageType);
     this.configSidebar.updateConfig(this.currentConfig);
   }
 
-  /**
-   * Создание конфига по умолчанию
-   */
   private createDefaultConfig(domain?: string, pageType?: string): ParserConfig {
     return {
       id: generateUniqueId(),
@@ -396,194 +247,99 @@ class ParserConfigContentScript {
     };
   }
 
-  /**
-   * Тестирование конфига на текущей странице
-   */
   private async testConfigOnPage(config: ParserConfig): Promise<any[]> {
-    const results = [];
-    
+    const results: any[] = [];
     for (const [fieldName, selectorConfig] of Object.entries(config.selectors)) {
       const schemaField = config.schema.fields.find(f => f.name === fieldName);
       if (!schemaField) continue;
-      
       try {
-        const element = this.findElementBySelectorConfig(selectorConfig);
-        const extractedValue = this.extractValueFromElement(element, selectorConfig);
-        
-        const result = {
+        const element = this.findElementBySelectorConfig(selectorConfig as any);
+        const extractedValue = this.extractValueFromElement(element, selectorConfig as any);
+        results.push({
           fieldName,
           success: true,
           extractedValue,
-          expectedType: schemaField.type,
+          expectedType: (schemaField as any).type,
           actualType: typeof extractedValue,
-          selector: selectorConfig.primary,
+          selector: (selectorConfig as any).primary,
           timestamp: new Date().toISOString()
-        };
-        
-        results.push(result);
+        });
       } catch (error) {
         results.push({
           fieldName,
           success: false,
           error: (error as Error).message,
-          expectedType: schemaField.type,
+          expectedType: (schemaField as any).type,
           actualType: 'error',
-          selector: selectorConfig.primary,
+          selector: (selectorConfig as any).primary,
           timestamp: new Date().toISOString()
         });
       }
     }
-    
     return results;
   }
 
-  /**
-   * Поиск элемента по конфигу селектора
-   */
   private findElementBySelectorConfig(selectorConfig: any): Element {
-    const selectors = [selectorConfig.primary, ...selectorConfig.fallback];
-    
+    const selectors = [selectorConfig.primary, ...(selectorConfig.fallback ?? [])];
     for (const selector of selectors) {
-      try {
-        const element = document.querySelector(selector);
-        if (element) return element;
-      } catch (error) {
-        console.warn(`Invalid selector: ${selector}`, error);
-      }
+      try { const element = document.querySelector(selector); if (element) return element; } catch {}
     }
-    
     throw new Error(`No element found for selectors: ${selectors.join(', ')}`);
   }
 
-  /**
-   * Извлечение значения из элемента
-   */
   private extractValueFromElement(element: Element, selectorConfig: any): any {
     switch (selectorConfig.type) {
-      case 'text':
-        return element.textContent?.trim() ?? '';
-        
-      case 'attribute':
-        const attrName = selectorConfig.attribute ?? 'value';
-        return element.getAttribute(attrName) ?? '';
-        
-      case 'html':
-        return element.innerHTML;
-        
-      case 'array':
-        const elements = document.querySelectorAll(selectorConfig.primary);
-        return Array.from(elements).map(el => el.textContent?.trim() ?? '');
-        
-      case 'count':
-        const countElements = document.querySelectorAll(selectorConfig.primary);
-        return countElements.length;
-        
-      case 'exists':
-        return document.querySelector(selectorConfig.primary) !== null;
-        
-      default:
-        return element.textContent?.trim() ?? '';
+      case 'text': return element.textContent?.trim() ?? '';
+      case 'attribute': return element.getAttribute(selectorConfig.attribute ?? 'value') ?? '';
+      case 'html': return element.innerHTML;
+      case 'array': return Array.from(document.querySelectorAll(selectorConfig.primary)).map(el => el.textContent?.trim() ?? '');
+      case 'count': return document.querySelectorAll(selectorConfig.primary).length;
+      case 'exists': return document.querySelector(selectorConfig.primary) !== null;
+      default: return element.textContent?.trim() ?? '';
     }
   }
 
-  /**
-   * Валидация конфига
-   */
   private async validateConfig(config: ParserConfig): Promise<{valid: boolean; errors: string[]}> {
-    // Базовая валидация (расширится позже)
     const errors: string[] = [];
-    
-    if (!config.platform?.name) {
-      errors.push('Platform name is required');
-    }
-    
-    if (!config.schema?.fields?.length) {
-      errors.push('Schema must have at least one field');
-    }
-    
+    if (!config.platform?.name) errors.push('Platform name is required');
+    if (!config.schema?.fields?.length) errors.push('Schema must have at least one field');
     return { valid: errors.length === 0, errors };
   }
 
-  /**
-   * Сохранение конфига в storage
-   */
   private async saveConfigToStorage(config: ParserConfig): Promise<void> {
     const key = `config_${config.platform.domain}`;
     await chrome.storage.local.set({ [key]: config });
   }
 
-  /**
-   * Загрузка конфига из storage
-   */
   private async loadConfigFromStorage(domain: string): Promise<ParserConfig | null> {
     const key = `config_${domain}`;
     const result = await chrome.storage.local.get(key);
     return result[key] ?? null;
   }
 
-  /**
-   * Получение атрибутов элемента
-   */
   private getElementAttributes(element: Element): Record<string, string> {
     const attributes: Record<string, string> = {};
-    for (const attr of element.attributes) {
-      attributes[attr.name] = attr.value;
-    }
+    for (const attr of element.attributes) attributes[attr.name] = attr.value;
     return attributes;
   }
 
-  /**
-   * Безопасная инжекция стилей (учёт отсутствия head)
-   */
   private injectStylesSafely(): void {
     const head = document.head || document.getElementsByTagName('head')[0] || document.documentElement || document.body;
     if (!head) return;
-
     if (document.getElementById('pcb-styles')) return;
-    
-    const styles = `
-      /* Подсветка элементов */
-      .pcb-highlight {
-        outline: 3px solid #1890ff !important;
-        background-color: rgba(24, 144, 255, 0.1) !important;
-        position: relative !important;
-        z-index: 999999 !important;
-      }
-      
-      .pcb-highlight-hover {
-        outline: 2px solid #722ed1 !important;
-        background-color: rgba(114, 46, 209, 0.05) !important;
-      }
-      
-      .pcb-highlight-selected {
-        outline: 3px solid #52c41a !important;
-        background-color: rgba(82, 196, 26, 0.1) !important;
-      }
-      
-      /* Активное состояние расширения */
-      body.pcb-active {
-        cursor: crosshair !important;
-      }
-      
-      body.pcb-active * {
-        cursor: crosshair !important;
-      }
-      
-      /* Исключения для UI расширения */
-      .pcb-sidebar,
-      .pcb-sidebar * {
-        cursor: default !important;
-      }
-    `;
-    
     const styleElement = document.createElement('style');
     styleElement.id = 'pcb-styles';
-    styleElement.textContent = styles;
+    styleElement.textContent = `
+      .pcb-highlight{outline:3px solid #1890ff!important;background-color:rgba(24,144,255,.1)!important;position:relative!important;z-index:999999!important}
+      .pcb-highlight-hover{outline:2px solid #722ed1!important;background-color:rgba(114,46,209,.05)!important}
+      .pcb-highlight-selected{outline:3px solid #52c41a!important;background-color:rgba(82,196,26,.1)!important}
+      body.pcb-active,body.pcb-active *{cursor:crosshair!important}
+      .pcb-sidebar,.pcb-sidebar *{cursor:default!important}
+    `;
     head.appendChild(styleElement);
   }
 }
 
-// Инициализация content script с type-safe проверкой
 if (typeof window !== 'undefined' && !(window as any).parserConfigContentScript) {
   (window as any).parserConfigContentScript = new ParserConfigContentScript();
 }
