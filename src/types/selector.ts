@@ -6,6 +6,7 @@ export interface SelectorConfig {
   fallback: string[];
   type: ExtractionType;
   required: boolean;
+  attribute?: string;    // название атрибута для type='attribute'
   validation?: ValidationRule;
   postProcess?: PostProcessor[];
   confidence: number;
