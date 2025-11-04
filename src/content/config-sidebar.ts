@@ -1,5 +1,5 @@
 /**
- * Config Sidebar - полноценный Selector Editor с очисткой подсветок
+ * Config Sidebar - полноценный Selector Editor с очисткой подсветок + UX улучшения
  */
 
 import type { 
@@ -452,8 +452,19 @@ export class ConfigSidebar {
     if (!field) return '<div style="padding: 20px; color: #ff4d4f;">Поле не найдено</div>';
     
     const existing = config.selectors[fieldName] as SelectorConfig | undefined;
+    
+    // ДРУЖЕЛЮБНЫЕ НАЗВАНИЯ ТИПОВ ИЗВЛЕЧЕНИЯ
+    const typeLabels = {
+      text: '📄 Текст внутри',
+      attribute: '🔗 Ссылка/адрес (атрибут)',
+      html: '🌐 HTML код',
+      array: '📋 Список элементов',
+      count: '🔢 Количество',
+      exists: '✅ Есть/нет'
+    };
+    
     const typeOptions = ['text', 'attribute', 'html', 'array', 'count', 'exists']
-      .map(t => `<option value="${t}" ${existing?.type === t ? 'selected' : ''}>${t}</option>`).join('');
+      .map(t => `<option value="${t}" ${existing?.type === t ? 'selected' : ''}>${typeLabels[t as keyof typeof typeLabels] || t}</option>`).join('');
     const primary = existing?.primary ?? '';
     const attrName = existing?.type === 'attribute' ? ((existing as any).attribute ?? 'value') : 'value';
     const fallback = ((existing as any)?.fallback ?? []).map((v: string, i: number) =>
@@ -484,6 +495,7 @@ export class ConfigSidebar {
             <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">🎯 Основной селектор</label>
             <div style="display: flex; gap: 8px;">
               <input id="pcb-primary-selector" type="text" value="${primary.replace(/"/g, '&quot;')}" placeholder="Например, #mangaBox > div.content > h1.title" style="flex: 1; padding: 12px; border: 2px solid #e8e8e8; border-radius: 8px; font-family: monospace; font-size: 13px;" />
+              <button id="pcb-pick-new-element" class="btn btn--secondary" style="padding: 12px 14px; white-space: nowrap; background: #52c41a; color: white; border: none; font-weight: 600;">🎯 Выбрать элемент</button>
               <button id="pcb-preview-selector" class="btn btn--outline" style="padding: 12px 16px; white-space: nowrap;">🔍 Предпросмотр</button>
             </div>
             <div id="pcb-preview-results" style="margin-top: 8px;"></div>
@@ -492,6 +504,7 @@ export class ConfigSidebar {
             <div>
               <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">⚙️ Тип извлечения</label>
               <select id="pcb-extraction-type" style="width: 100%; padding: 12px; border: 2px solid #e8e8e8; border-radius: 8px; font-size: 14px;">${typeOptions}</select>
+              <div id="pcb-extract-tip" style="font-size: 12px; color: #666; margin-top: 6px; min-height: 16px;"></div>
             </div>
             <div id="pcb-attribute-wrap" style="${existing?.type === 'attribute' ? '' : 'display:none;'}">
               <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">📋 Атрибут</label>
@@ -670,11 +683,37 @@ export class ConfigSidebar {
     const saveBtn = this.sidebarElement.querySelector('#pcb-save-selector');
     const clearBtn = this.sidebarElement.querySelector('#pcb-clear-selector');
     const addFallbackBtn = this.sidebarElement.querySelector('#pcb-add-fallback');
-
-    if (typeSelect && attrWrap) {
-      typeSelect.addEventListener('change', () => {
-        attrWrap.style.display = typeSelect.value === 'attribute' ? '' : 'none';
+    
+    // НОВАЯ КНОПКА "Выбрать элемент" ПРЯМО В РЕДАКТОРЕ
+    const pickBtn = this.sidebarElement.querySelector('#pcb-pick-new-element');
+    if (pickBtn) {
+      pickBtn.addEventListener('click', () => {
+        if (!this.selectedField || !this.currentConfig) return;
+        const field = this.currentConfig.schema.fields.find(f => f.name === this.selectedField);
+        if (!field) return;
+        this.onMessage({ type: 'START_SELECTION', fieldName: field.name, fieldType: field.type, id: `sidebar_${Date.now()}`, timestamp: Date.now() });
       });
+    }
+    
+    // ПОДСКАЗКИ ДЛЯ ТИПОВ ИЗВЛЕЧЕНИЯ
+    if (typeSelect) {
+      const tips: Record<string,string> = {
+        text: 'Извлекается видимый текст. Пример: "Моя манга"',
+        attribute: 'Извлекается атрибут (href, src). Настройте справа →',
+        html: 'Извлекается HTML содержимое элемента с тегами',
+        array: 'Массив значений по всем совпавшим элементам',
+        count: 'Число совпавших элементов. Пример: 42',
+        exists: 'Возвращает true/false — найден ли хотя бы 1 элемент'
+      };
+      const updateTip = () => {
+        const tip = this.sidebarElement?.querySelector('#pcb-extract-tip') as HTMLElement | null;
+        if (tip) tip.textContent = tips[typeSelect.value] || '';
+      };
+      typeSelect.addEventListener('change', () => {
+        if (attrWrap) attrWrap.style.display = typeSelect.value === 'attribute' ? '' : 'none';
+        updateTip();
+      });
+      updateTip();
     }
 
     if (previewBtn) previewBtn.addEventListener('click', () => this.performDetailedPreview());
