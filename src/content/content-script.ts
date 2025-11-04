@@ -5,8 +5,11 @@
 import type {
   ExtensionMessage,
   MessageResponse,
-  PopupMessage,
-  SidebarMessage,
+  ActivateExtensionMessage,
+  StartSelectionMessage,
+  TestConfigMessage,
+  HighlightElementMessage,
+  SaveConfigMessage,
   ElementSelectedMessage,
   ParserConfig
 } from '@/types';
@@ -36,7 +39,7 @@ class ParserConfigContentScript {
    */
   private setupMessageListeners(): void {
     chrome.runtime.onMessage.addListener(
-      (message: ExtensionMessage, sender, sendResponse) => {
+      (message: ExtensionMessage, _sender, sendResponse) => {
         this.handleMessage(message)
           .then(response => sendResponse(response))
           .catch(error => {
@@ -50,33 +53,33 @@ class ParserConfigContentScript {
   }
 
   /**
-   * Обработка сообщений
+   * Обработка сообщений с type guards
    */
   private async handleMessage(message: ExtensionMessage): Promise<MessageResponse> {
     switch (message.type) {
       case 'ACTIVATE_EXTENSION':
-        return this.handleActivate(message);
+        return this.handleActivate(message as ActivateExtensionMessage);
         
       case 'DEACTIVATE_EXTENSION':
         return this.handleDeactivate();
         
       case 'START_SELECTION':
-        return this.handleStartSelection(message);
+        return this.handleStartSelection(message as StartSelectionMessage);
         
       case 'STOP_SELECTION':
         return this.handleStopSelection();
         
       case 'TEST_CONFIG':
-        return this.handleTestConfig(message);
+        return this.handleTestConfig(message as TestConfigMessage);
         
       case 'HIGHLIGHT_ELEMENT':
-        return this.handleHighlightElement(message);
+        return this.handleHighlightElement(message as HighlightElementMessage);
         
       case 'GET_CONFIG':
         return this.handleGetConfig();
         
       case 'SAVE_CONFIG':
-        return this.handleSaveConfig(message);
+        return this.handleSaveConfig(message as SaveConfigMessage);
         
       default:
         return { success: false, error: 'Unknown message type' };
@@ -86,7 +89,7 @@ class ParserConfigContentScript {
   /**
    * Активация расширения
    */
-  private async handleActivate(message: PopupMessage): Promise<MessageResponse> {
+  private async handleActivate(message: ActivateExtensionMessage): Promise<MessageResponse> {
     if (this.isActive) {
       return { success: true, data: 'Already active' };
     }
@@ -138,7 +141,7 @@ class ParserConfigContentScript {
   /**
    * Начало выделения элемента
    */
-  private async handleStartSelection(message: SidebarMessage): Promise<MessageResponse> {
+  private async handleStartSelection(message: StartSelectionMessage): Promise<MessageResponse> {
     if (!this.isActive) {
       return { success: false, error: 'Extension not active' };
     }
@@ -170,7 +173,7 @@ class ParserConfigContentScript {
   /**
    * Тестирование конфига
    */
-  private async handleTestConfig(message: SidebarMessage): Promise<MessageResponse> {
+  private async handleTestConfig(message: TestConfigMessage): Promise<MessageResponse> {
     const { config } = message;
     
     try {
@@ -188,7 +191,7 @@ class ParserConfigContentScript {
   /**
    * Подсветка элемента по селектору
    */
-  private async handleHighlightElement(message: SidebarMessage): Promise<MessageResponse> {
+  private async handleHighlightElement(message: HighlightElementMessage): Promise<MessageResponse> {
     const { selector } = message;
     
     try {
@@ -212,7 +215,7 @@ class ParserConfigContentScript {
   /**
    * Сохранение конфига
    */
-  private async handleSaveConfig(message: PopupMessage): Promise<MessageResponse> {
+  private async handleSaveConfig(message: SaveConfigMessage): Promise<MessageResponse> {
     const { config } = message;
     
     try {
@@ -272,7 +275,6 @@ class ParserConfigContentScript {
    */
   private async initializeConfig(pageType?: string): Promise<void> {
     const domain = window.location.hostname;
-    const url = window.location.href;
     
     // Пытаемся загрузить существующий конфиг
     const existingConfig = await this.loadConfigFromStorage(domain);
@@ -504,9 +506,9 @@ class ParserConfigContentScript {
   }
 }
 
-// Инициализация content script
-if (typeof window !== 'undefined' && !window.parserConfigContentScript) {
-  window.parserConfigContentScript = new ParserConfigContentScript();
+// Инициализация content script с type-safe проверкой
+if (typeof window !== 'undefined' && !(window as any).parserConfigContentScript) {
+  (window as any).parserConfigContentScript = new ParserConfigContentScript();
 }
 
 export default ParserConfigContentScript;

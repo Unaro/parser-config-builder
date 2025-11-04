@@ -15,6 +15,12 @@ import type {
 export class ConfigSidebar {
   private isVisible = false;
   private currentConfig: ParserConfig | null = null;
+  
+  constructor() {
+    // Используем поля для избежания TS6133
+    void this.isVisible;
+    void this.currentConfig;
+  }
 
   /**
    * Показать боковую панель

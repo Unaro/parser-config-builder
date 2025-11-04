@@ -3,7 +3,7 @@
  */
 
 import type { GeneratedSelector } from '@/types';
-import { generateSelectors, getBestSelector } from '@/utils/selector';
+import { getBestSelector } from '@/utils/selector';
 import { 
   highlightElement, 
   unhighlightElement, 
@@ -160,7 +160,7 @@ export class ElementSelector {
   /**
    * Обработчик ухода мыши
    */
-  private handleMouseOut = (event: MouseEvent): void => {
+  private handleMouseOut = (_event: MouseEvent): void => {
     if (!this.isSelecting) return;
     
     // Не убираем подсветку сразу, только при наведении на новый элемент
@@ -177,6 +177,15 @@ export class ElementSelector {
     
     const target = event.target as Element;
     if (!target || this.isExtensionElement(target)) return;
+    
+    this.selectElement(target);
+  };
+
+  /**
+   * Выбрать элемент
+   */
+  private selectElement(target: Element): void {
+    if (!this.currentOptions) return;
     
     // Генерируем селектор для выбранного элемента
     const selector = getBestSelector(target);
@@ -195,7 +204,7 @@ export class ElementSelector {
     
     // Останавливаем выделение
     this.stopSelection();
-  };
+  }
 
   /**
    * Обработчик клавиатуры
@@ -213,12 +222,8 @@ export class ElementSelector {
       case 'Enter':
         if (this.hoveredElement) {
           event.preventDefault();
-          // Симулируем клик по наведенному элементу
-          this.handleClick({ 
-            target: this.hoveredElement,
-            preventDefault: () => {},
-            stopPropagation: () => {}
-          } as MouseEvent);
+          // Прямой вызов логики выбора элемента
+          this.selectElement(this.hoveredElement);
         }
         break;
     }
@@ -356,19 +361,23 @@ export class ElementSelector {
   }
 
   /**
-   * Получить информацию об элементе
+   * Получить информацию об элементе с правильной типизацией
    */
   private getElementInfo(element: Element): {
     tagName: string;
-    classes?: string;
-    id?: string;
-    text?: string;
+    classes?: string | undefined;
+    id?: string | undefined;
+    text?: string | undefined;
   } {
+    const className = element.className;
+    const elementId = element.id;
+    const textContent = element.textContent?.trim();
+    
     return {
       tagName: element.tagName.toLowerCase(),
-      classes: element.className ? element.className.toString().trim() : undefined,
-      id: element.id || undefined,
-      text: element.textContent?.trim().substring(0, 50) || undefined
+      classes: className ? className.toString().trim() : undefined,
+      id: elementId || undefined,
+      text: textContent && textContent.length > 0 ? textContent.substring(0, 50) : undefined
     };
   }
 

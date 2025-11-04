@@ -2,7 +2,22 @@
  * Background Service Worker - управление жизненным циклом расширения
  */
 
-import type { ExtensionMessage, MessageResponse } from '@/types';
+import type { 
+  ExtensionMessage, 
+  MessageResponse,
+  ActivateExtensionMessage,
+  DeactivateExtensionMessage,
+  StartSelectionMessage,
+  GetTabInfoMessage,
+  UpdateBadgeMessage,
+  StoreTempDataMessage,
+  GetTempDataMessage
+} from '@/types';
+
+declare const globalThis: {
+  parserConfigBackground?: ParserConfigBackground;
+  [key: string]: unknown;
+};
 
 class ParserConfigBackground {
   private activeTabId: number | null = null;
@@ -72,9 +87,6 @@ class ParserConfigBackground {
     if (details.reason === 'install') {
       // Первая установка
       await this.initializeExtension();
-      
-      // Открываем welcome страницу (опционально)
-      // chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
     }
 
     if (details.reason === 'update') {
@@ -101,7 +113,7 @@ class ParserConfigBackground {
   }
 
   /**
-   * Обработка сообщений
+   * Обработка сообщений с type guards
    */
   private async handleMessage(
     message: ExtensionMessage, 
@@ -114,13 +126,13 @@ class ParserConfigBackground {
         return this.getTabInfo(sender.tab?.id);
 
       case 'UPDATE_BADGE':
-        return this.updateBadge(message.data);
+        return this.updateBadge((message as UpdateBadgeMessage).data);
 
       case 'STORE_TEMP_DATA':
-        return this.storeTempData(message.data);
+        return this.storeTempData((message as StoreTempDataMessage).data);
 
       case 'GET_TEMP_DATA':
-        return this.getTempData(message.data);
+        return this.getTempData((message as GetTempDataMessage).data);
 
       default:
         return { success: false, error: 'Unknown message type' };
@@ -199,7 +211,7 @@ class ParserConfigBackground {
     if (!this.activeTabId) return;
 
     try {
-      const message = this.isExtensionActive 
+      const message: ExtensionMessage = this.isExtensionActive 
         ? { type: 'DEACTIVATE_EXTENSION', id: 'bg_' + Date.now(), timestamp: Date.now() }
         : { type: 'ACTIVATE_EXTENSION', id: 'bg_' + Date.now(), timestamp: Date.now() };
 
@@ -223,7 +235,7 @@ class ParserConfigBackground {
     if (!this.activeTabId) return;
 
     try {
-      const message = {
+      const message: ExtensionMessage = {
         type: 'START_SELECTION',
         id: 'bg_' + Date.now(),
         timestamp: Date.now(),
@@ -296,7 +308,7 @@ class ParserConfigBackground {
   /**
    * Обновить badge на иконке
    */
-  private async updateBadge(data: any): Promise<MessageResponse> {
+  private async updateBadge(data: { text?: string; color?: string }): Promise<MessageResponse> {
     try {
       await chrome.action.setBadgeText({ text: data.text || '' });
       await chrome.action.setBadgeBackgroundColor({ color: data.color || '#1890ff' });
@@ -310,7 +322,7 @@ class ParserConfigBackground {
   /**
    * Сохранить временные данные
    */
-  private async storeTempData(data: any): Promise<MessageResponse> {
+  private async storeTempData(data: { key: string; value: unknown }): Promise<MessageResponse> {
     try {
       const key = `temp_${data.key}`;
       await chrome.storage.session.set({ [key]: data.value });
@@ -324,7 +336,7 @@ class ParserConfigBackground {
   /**
    * Получить временные данные
    */
-  private async getTempData(data: any): Promise<MessageResponse> {
+  private async getTempData(data: { key: string }): Promise<MessageResponse> {
     try {
       const key = `temp_${data.key}`;
       const result = await chrome.storage.session.get(key);
@@ -344,7 +356,7 @@ class ParserConfigBackground {
         if (chrome.runtime.lastError) {
           resolve({ 
             success: false, 
-            error: chrome.runtime.lastError.message 
+            error: chrome.runtime.lastError.message ?? 'Unknown error'
           });
         } else {
           resolve(response || { success: true });
