@@ -10,21 +10,36 @@ import type { ExtensionMessage, MessageResponse } from '@/types';
 export async function sendMessageToContentScript(
   message: ExtensionMessage
 ): Promise<MessageResponse> {
+  console.log('Messaging: sendMessageToContentScript called with:', message);
+  
   return new Promise((resolve) => {
+    console.log('Messaging: Querying active tab...');
+    
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      console.log('Messaging: Active tabs found:', tabs);
+      
       const activeTab = tabs[0];
       if (!activeTab?.id) {
+        console.error('Messaging: No active tab found');
         resolve({ success: false, error: 'No active tab found' });
         return;
       }
       
+      console.log('Messaging: Sending message to tab:', activeTab.id, message);
+      
       chrome.tabs.sendMessage(activeTab.id, message, (response) => {
+        console.log('Messaging: Raw response:', response);
+        console.log('Messaging: Chrome runtime error:', chrome.runtime.lastError);
+        
         if (chrome.runtime.lastError) {
+          const errorMsg = chrome.runtime.lastError.message ?? 'Unknown error';
+          console.error('Messaging: Chrome runtime error occurred:', errorMsg);
           resolve({ 
             success: false, 
-            error: chrome.runtime.lastError.message ?? 'Unknown error'
+            error: errorMsg
           });
         } else {
+          console.log('Messaging: Message sent successfully, response:', response);
           resolve(response || { success: true });
         }
       });
@@ -38,12 +53,19 @@ export async function sendMessageToContentScript(
 export async function sendMessageToBackground(
   message: ExtensionMessage
 ): Promise<MessageResponse> {
+  console.log('Messaging: sendMessageToBackground called with:', message);
+  
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
+      console.log('Messaging: Background response:', response);
+      console.log('Messaging: Chrome runtime error:', chrome.runtime.lastError);
+      
       if (chrome.runtime.lastError) {
+        const errorMsg = chrome.runtime.lastError.message ?? 'Unknown error';
+        console.error('Messaging: Background error:', errorMsg);
         resolve({ 
           success: false, 
-          error: chrome.runtime.lastError.message ?? 'Unknown error'
+          error: errorMsg
         });
       } else {
         resolve(response || { success: true });
