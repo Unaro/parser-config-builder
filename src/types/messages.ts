@@ -118,12 +118,38 @@ export interface HighlightElementMessage extends BaseMessage {
 }
 
 /**
+ * Дополнительные сообщения для Background Service
+ */
+export interface GetTabInfoMessage extends BaseMessage {
+  type: 'GET_TAB_INFO';
+}
+
+export interface UpdateBadgeMessage extends BaseMessage {
+  type: 'UPDATE_BADGE';
+  data: { text?: string; color?: string };
+}
+
+export interface StoreTempDataMessage extends BaseMessage {
+  type: 'STORE_TEMP_DATA';
+  data: { key: string; value: unknown };
+}
+
+export interface GetTempDataMessage extends BaseMessage {
+  type: 'GET_TEMP_DATA';
+  data: { key: string };
+}
+
+/**
  * Общие типы сообщений
  */
 export type ExtensionMessage = 
   | PopupMessage 
   | ContentMessage 
-  | SidebarMessage;
+  | SidebarMessage
+  | GetTabInfoMessage
+  | UpdateBadgeMessage
+  | StoreTempDataMessage
+  | GetTempDataMessage;
 
 /**
  * Ответ на сообщение
@@ -131,7 +157,7 @@ export type ExtensionMessage =
 export interface MessageResponse<T = unknown> {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: string | undefined;
 }
 
 /**
@@ -140,3 +166,23 @@ export interface MessageResponse<T = unknown> {
 export type MessageHandler<T extends BaseMessage = BaseMessage> = (
   message: T
 ) => Promise<MessageResponse> | MessageResponse;
+
+/**
+ * Создать базовое сообщение с правильной типизацией
+ */
+export function createBaseMessage<T extends ExtensionMessage['type']>(
+  type: T
+): Pick<BaseMessage, 'type' | 'id' | 'timestamp'> {
+  return {
+    type,
+    id: generateMessageId(),
+    timestamp: Date.now()
+  };
+}
+
+/**
+ * Генерация уникального ID для сообщения
+ */
+function generateMessageId(): string {
+  return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}

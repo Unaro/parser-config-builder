@@ -22,7 +22,7 @@ export async function sendMessageToContentScript(
         if (chrome.runtime.lastError) {
           resolve({ 
             success: false, 
-            error: chrome.runtime.lastError.message 
+            error: chrome.runtime.lastError.message ?? 'Unknown error'
           });
         } else {
           resolve(response || { success: true });
@@ -43,7 +43,7 @@ export async function sendMessageToBackground(
       if (chrome.runtime.lastError) {
         resolve({ 
           success: false, 
-          error: chrome.runtime.lastError.message 
+          error: chrome.runtime.lastError.message ?? 'Unknown error'
         });
       } else {
         resolve(response || { success: true });
@@ -76,16 +76,18 @@ export async function broadcastMessage(
 }
 
 /**
- * Создать уникальный ID для сообщения
+ * Сгенерировать уникальный ID для сообщения
  */
 export function generateMessageId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /**
- * Создать базовое сообщение
+ * Создать базовое сообщение с правильной типизацией
  */
-export function createBaseMessage(type: string): Pick<ExtensionMessage, 'type' | 'id' | 'timestamp'> {
+export function createBaseMessage<T extends ExtensionMessage['type']>(
+  type: T
+): Pick<ExtensionMessage, 'type' | 'id' | 'timestamp'> {
   return {
     type,
     id: generateMessageId(),

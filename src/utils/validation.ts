@@ -83,17 +83,6 @@ export function validateValueByRules(value: unknown, rules: ValidationRule): Val
     }
   }
   
-  // Проверка массивов
-  if (Array.isArray(value)) {
-    if (rules.minItems !== undefined && value.length < rules.minItems) {
-      errors.push(`Array too short. Min items: ${rules.minItems}`);
-    }
-    
-    if (rules.maxItems !== undefined && value.length > rules.maxItems) {
-      errors.push(`Array too long. Max items: ${rules.maxItems}`);
-    }
-  }
-  
   return { valid: errors.length === 0, errors };
 }
 
