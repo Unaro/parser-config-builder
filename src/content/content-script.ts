@@ -1,5 +1,5 @@
 /**
- * Content Script - основной компонент для взаимодействия с DOM (с GET_STATUS/TOGGLE_ACTIVE)
+ * Content Script - основной компонент для взаимодействия с DOM (с улучшенным статусом)
  */
 
 import './content-styles.css';
@@ -102,7 +102,7 @@ class ParserConfigContentScript {
       hasSidebar: this.configSidebar && this.isActive, // Предполагаем, что сидбар появляется при активации
       pageType: this.currentConfig?.pageType,
       domain,
-      selectingField: this.currentlySelectingField,
+      ...(this.currentlySelectingField ? { selectingField: this.currentlySelectingField } : {}),
       fieldsCount: this.currentConfig?.schema.fields.length ?? 0,
       selectorsCount: Object.keys(this.currentConfig?.selectors ?? {}).length
     };
@@ -143,7 +143,7 @@ class ParserConfigContentScript {
     return { success: true };
   }
 
-  // --- Остальные обработчики ---
+  // --- Existing methods ---
   private async handleActivate(message: ActivateExtensionMessage): Promise<MessageResponse> {
     if (this.isActive) return { success: true, data: 'Already active' };
     try {
@@ -166,6 +166,11 @@ class ParserConfigContentScript {
     this.configSidebar.hide();
     this.elementSelector.clearAllHighlights();
     document.body.classList.remove('pcb-active');
+    
+    // Убираем уведомления при деактивации
+    const notification = document.getElementById('pcb-selection-notification');
+    if (notification) notification.remove();
+    
     return { success: true, data: 'Extension deactivated' };
   }
 
@@ -182,10 +187,12 @@ class ParserConfigContentScript {
       fieldType,
       onElementSelected: (element, selector) => {
         this.currentlySelectingField = null;
+        this.hideSelectionModeNotification();
         this.handleElementSelected(fieldName, element, selector);
       },
       onSelectionCancelled: () => {
         this.currentlySelectingField = null;
+        this.hideSelectionModeNotification();
         this.configSidebar.notifySelectionCancelled(fieldName);
       }
     });
@@ -196,6 +203,11 @@ class ParserConfigContentScript {
   private async handleStopSelection(): Promise<MessageResponse> {
     this.elementSelector.stopSelection();
     this.currentlySelectingField = null;
+    this.hideSelectionModeNotification();
+    
+    // Показываем уведомление об остановке
+    this.showStopSelectionNotification();
+    
     return { success: true, data: 'Selection stopped' };
   }
 
@@ -240,6 +252,8 @@ class ParserConfigContentScript {
   // --- Вспомогательные методы ---
   
   private showSelectionModeNotification(fieldName: string): void {
+    this.hideSelectionModeNotification(); // Убираем предыдущее
+    
     const notification = document.createElement('div');
     notification.id = 'pcb-selection-notification';
     notification.style.cssText = `
@@ -282,37 +296,60 @@ class ParserConfigContentScript {
     `;
     
     // Анимация
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes slideInDown {
-        from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
-        to { transform: translateX(-50%) translateY(0); opacity: 1; }
-      }
-    `;
     if (!document.getElementById('pcb-selection-animations')) {
+      const style = document.createElement('style');
       style.id = 'pcb-selection-animations';
+      style.textContent = `
+        @keyframes slideInDown {
+          from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+          to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+      `;
       document.head.appendChild(style);
     }
     
-    // Удаляем предыдущее уведомление
-    const existing = document.getElementById('pcb-selection-notification');
-    if (existing) existing.remove();
-    
     document.body.appendChild(notification);
     
-    // Автоудаление через 10 секунд
+    // Автоудаление через 15 секунд
     setTimeout(() => {
       if (notification.parentNode) notification.remove();
-    }, 10000);
+    }, 15000);
+  }
+  
+  private hideSelectionModeNotification(): void {
+    const notification = document.getElementById('pcb-selection-notification');
+    if (notification) notification.remove();
+  }
+  
+  private showStopSelectionNotification(): void {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 999999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+    
+    notification.innerHTML = '⏹️ Режим выбора остановлен';
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      if (notification.parentNode) notification.remove();
+    }, 2000);
   }
 
   private setupElementSelector(): void { /* no-op */ }
 
   private handleElementSelected(fieldName: string, element: Element, selector: any): void {
-    // Убираем уведомление о режиме выбора
-    const notification = document.getElementById('pcb-selection-notification');
-    if (notification) notification.remove();
-    
     const message: ElementSelectedMessage = {
       type: 'ELEMENT_SELECTED',
       id: generateUniqueId(),
