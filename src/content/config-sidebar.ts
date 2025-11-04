@@ -1,5 +1,5 @@
 /**
- * Config Sidebar - боковая панель управления конфигурацией (с полноценным Selector Editor)
+ * Config Sidebar - боковая панель с полноценным Selector Editor и улучшенной навигацией
  */
 
 import type { 
@@ -11,11 +11,8 @@ import type {
 import type { SelectorConfig } from '@/types/selector';
 import type { SchemaField } from '@/types/schema';
 import { SidebarUIMethods } from './config-sidebar-methods';
-import {
-  getPageTypeLabel,
-  getExtractionTypeLabel,
-  getDefaultSelectorConfig
-} from './config-sidebar-helpers';
+import { getPageTypeLabel } from './config-sidebar-helpers';
+import { queryCount, validateSelector } from '@/utils/selector';
 
 export class ConfigSidebar {
   private isVisible = false;
@@ -25,6 +22,7 @@ export class ConfigSidebar {
   private selectedField: string | null = null;
   private selectionHistory: ElementSelectedMessage[] = [];
   private onMessage: (message: any) => void;
+  private lastPreviewResults: any[] = []; // Кэш результатов предпросмотра
 
   constructor(onMessage: (message: any) => void) {
     this.onMessage = onMessage;
@@ -45,6 +43,7 @@ export class ConfigSidebar {
     this.isVisible = false;
     this.currentSection = 'main';
     this.selectedField = null;
+    this.lastPreviewResults = [];
     console.log('ConfigSidebar: Hidden');
   }
 
@@ -118,6 +117,7 @@ export class ConfigSidebar {
   private openSelectorEditor(fieldName: string, selector?: any): void {
     this.selectedField = fieldName;
     this.currentSection = 'selector';
+    this.lastPreviewResults = [];
     this.updateSidebarContent();
   }
 
@@ -694,7 +694,7 @@ export class ConfigSidebar {
     `;
   }
   
-  // === Selector Editor (полная реализация) ===
+  // === Selector Editor (полная реализация с навигацией и предпросмотром) ===
   
   private renderSelectorEditor(): string {
     const fieldName = this.selectedField!;
@@ -721,52 +721,56 @@ export class ConfigSidebar {
     
     return `
       <div class="pcb-content" style="flex: 1; padding: 20px; background: white;">
-        <!-- Навигация -->
-        <div class="pcb-section-tabs" style="
+        <!-- Breadcrumbs навигация -->
+        <div class="pcb-breadcrumbs" style="
+          font-size: 13px;
+          color: #666;
+          margin-bottom: 16px;
+          padding: 12px 16px;
+          background: #f8f9fa;
+          border-radius: 8px;
           display: flex;
-          border-bottom: 2px solid #f0f0f0;
-          margin-bottom: 24px;
-          gap: 4px;
+          align-items: center;
+          gap: 8px;
         ">
-          <button class="pcb-tab" data-section="main" style="
-            padding: 12px 20px;
-            background: #f8f9fa;
-            color: #666;
+          <button class="pcb-breadcrumb" data-section="main" style="
+            background: none;
             border: none;
-            border-radius: 8px 8px 0 0;
-            font-size: 14px;
-            font-weight: 600;
+            color: #1890ff;
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 13px;
+          ">Обзор</button>
+          <span>›</span>
+          <button class="pcb-breadcrumb" data-section="schema" style="
+            background: none;
+            border: none;
+            color: #1890ff;
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 13px;
+          ">Схема</button>
+          <span>›</span>
+          <span style="font-weight: 600; color: #333;">Селектор: ${fieldName}</span>
+        </div>
+        
+        <!-- Кнопка возврата -->
+        <div style="margin-bottom: 20px;">
+          <button id="pcb-back-to-schema" class="btn btn--outline" style="
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: white;
+            color: #666;
+            border: 2px solid #e8e8e8;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
-          " onmouseover="this.style.backgroundColor='#e6f7ff'; this.style.color='#1890ff'" onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.color='#666'">ℹ️ Обзор</button>
-          
-          <button class="pcb-tab" data-section="schema" style="
-            padding: 12px 20px;
-            background: #f8f9fa;
-            color: #666;
-            border: none;
-            border-radius: 8px 8px 0 0;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-          " onmouseover="this.style.backgroundColor='#e6f7ff'; this.style.color='#1890ff'" onmouseout="this.style.backgroundColor='#f8f9fa'; this.style.color='#666'">
-            📄 Схема (${config.schema.fields.length})
-          </button>
-          
-          <button class="pcb-tab active" data-section="selector" style="
-            padding: 12px 20px;
-            background: #722ed1;
-            color: white;
-            border: none;
-            border-radius: 8px 8px 0 0;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            position: relative;
-            top: 2px;
-          ">
-            🎯 Селектор: ${fieldName}
+          " onmouseover="this.style.borderColor='#1890ff'; this.style.color='#1890ff'" onmouseout="this.style.borderColor='#e8e8e8'; this.style.color='#666'">
+            ← Назад к схеме
           </button>
         </div>
 
@@ -793,19 +797,21 @@ export class ConfigSidebar {
           <div>
             <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">🎯 Основной селектор</label>
             <div style="display: flex; gap: 8px;">
-              <input id="pcb-primary-selector" type="text" value="${primary.replace(/"/g, '&quot;')}" placeholder="Например, .title a" style="
+              <input id="pcb-primary-selector" type="text" value="${primary.replace(/"/g, '&quot;')}" placeholder="Например, #mangaBox > div.content > h1.title" style="
                 flex: 1;
                 padding: 12px;
                 border: 2px solid #e8e8e8;
                 border-radius: 8px;
                 font-family: monospace;
-                font-size: 14px;
+                font-size: 13px;
               " />
-              <button id="pcb-preview-selector" class="btn btn--outline" style="padding: 12px 16px;">
+              <button id="pcb-preview-selector" class="btn btn--outline" style="padding: 12px 16px; white-space: nowrap;">
                 🔍 Предпросмотр
               </button>
             </div>
-            <div id="pcb-preview-status" style="font-size: 12px; color: #666; margin-top: 4px;"></div>
+            
+            <!-- Расширенный предпросмотр -->
+            <div id="pcb-preview-results" style="margin-top: 8px;"></div>
           </div>
 
           <!-- Настройки извлечения -->
@@ -930,6 +936,30 @@ export class ConfigSidebar {
     this.bindMainSectionEvents();
     this.bindSchemaEditorEvents();
     this.bindSelectorEditorEvents();
+    this.bindBreadcrumbEvents();
+  }
+
+  private bindBreadcrumbEvents(): void {
+    const breadcrumbs = this.sidebarElement!.querySelectorAll('.pcb-breadcrumb');
+    breadcrumbs.forEach(crumb => {
+      crumb.addEventListener('click', (e) => {
+        const section = (e.target as HTMLElement).getAttribute('data-section') as any;
+        if (section !== this.currentSection) {
+          this.currentSection = section;
+          if (section !== 'selector') this.selectedField = null;
+          this.updateSidebarContent();
+        }
+      });
+    });
+    
+    const backBtn = this.sidebarElement!.querySelector('#pcb-back-to-schema');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.currentSection = 'schema';
+        this.selectedField = null;
+        this.updateSidebarContent();
+      });
+    }
   }
 
   private bindControlPanelEvents(): void {
@@ -1046,10 +1076,10 @@ export class ConfigSidebar {
       });
     }
 
-    // Предпросмотр селектора
+    // Предпросмотр с извлечением значений
     if (previewBtn) {
       previewBtn.addEventListener('click', () => {
-        this.tryPreviewSelector();
+        this.performDetailedPreview();
       });
     }
 
@@ -1081,49 +1111,159 @@ export class ConfigSidebar {
     }
   }
 
-  // === Методы Selector Editor ===
+  // === Методы Selector Editor с улучшенным предпросмотром ===
   
-  private tryPreviewSelector(): boolean {
+  private performDetailedPreview(): void {
     const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
-    const previewStatus = this.sidebarElement?.querySelector('#pcb-preview-status') as HTMLElement | null;
+    const typeSelect = this.sidebarElement?.querySelector('#pcb-extraction-type') as HTMLSelectElement | null;
+    const attrInput = this.sidebarElement?.querySelector('#pcb-attribute-name') as HTMLInputElement | null;
+    const resultsDiv = this.sidebarElement?.querySelector('#pcb-preview-results') as HTMLElement | null;
     
-    const selector = primaryInput?.value?.trim() ?? '';
+    if (!primaryInput || !resultsDiv) return;
+    
+    const selector = primaryInput.value.trim();
     if (!selector) {
-      if (previewStatus) {
-        previewStatus.textContent = 'Введите селектор';
-        previewStatus.style.color = '#faad14';
-      }
-      return false;
+      resultsDiv.innerHTML = '<div style="color: #faad14; font-size: 12px;">⚠️ Введите селектор</div>';
+      return;
     }
 
     try {
       const elements = document.querySelectorAll(selector);
-      const found = elements.length > 0;
+      const count = elements.length;
+      const extractionType = typeSelect?.value || 'text';
+      const attributeName = attrInput?.value || 'value';
       
-      if (previewStatus) {
-        if (found) {
-          previewStatus.textContent = `✅ Найдено элементов: ${elements.length}`;
-          previewStatus.style.color = '#52c41a';
-          // Подсвечиваем первый элемент
-          this.onMessage({ 
-            type: 'HIGHLIGHT_ELEMENT', 
-            selector, 
-            id: `sidebar_${Date.now()}`, 
-            timestamp: Date.now() 
-          });
-        } else {
-          previewStatus.textContent = '❌ Элементы не найдены';
-          previewStatus.style.color = '#ff4d4f';
+      if (count === 0) {
+        resultsDiv.innerHTML = `
+          <div style="padding: 12px; background: #fff2f0; border: 1px solid #ffccc7; border-radius: 6px; margin-top: 8px;">
+            <div style="color: #ff4d4f; font-weight: 600; font-size: 13px; margin-bottom: 4px;">❌ Элементы не найдены</div>
+            <div style="color: #999; font-size: 12px;"Селектор не соответствует ни одному элементу на странице</div>
+          </div>
+        `;
+        return;
+      }
+      
+      // Извлекаем значения
+      const values: string[] = [];
+      for (let i = 0; i < Math.min(count, 5); i++) { // Ограничиваем 5 для просмотра
+        const el = elements[i];
+        let value = '';
+        
+        switch (extractionType) {
+          case 'text':
+            value = el.textContent?.trim() || '';
+            break;
+          case 'attribute':
+            value = el.getAttribute(attributeName) || '';
+            break;
+          case 'html':
+            value = el.innerHTML || '';
+            break;
+          case 'count':
+            value = String(count);
+            break;
+          case 'exists':
+            value = 'true';
+            break;
+          default:
+            value = el.textContent?.trim() || '';
         }
+        
+        values.push(value.length > 50 ? value.substring(0, 50) + '...' : value);
       }
       
-      return found;
-    } catch (error) {
-      if (previewStatus) {
-        previewStatus.textContent = '❌ Неверный CSS селектор';
-        previewStatus.style.color = '#ff4d4f';
+      // Подсвечиваем первые элементы
+      this.onMessage({ type: 'HIGHLIGHT_ELEMENT', selector, id: `sidebar_${Date.now()}`, timestamp: Date.now() });
+      
+      // Отображаем результаты
+      const statusColor = count === 1 ? '#52c41a' : count > 1 ? '#faad14' : '#ff4d4f';
+      const statusText = count === 1 ? '✅ Уникальный' : `⚠️ ${count} элементов`;
+      
+      resultsDiv.innerHTML = `
+        <div style="padding: 12px; background: ${count === 1 ? '#f6ffed' : '#fff7e6'}; border: 1px solid ${count === 1 ? '#d9f7be' : '#ffe58f'}; border-radius: 6px; margin-top: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="color: ${statusColor}; font-weight: 600; font-size: 13px;">${statusText}</span>
+            <button id="pcb-copy-selector" style="
+              background: none;
+              border: 1px solid ${statusColor};
+              color: ${statusColor};
+              padding: 4px 8px;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 11px;
+            " title="Скопировать селектор">📋</button>
+          </div>
+          ${count > 0 && values.length > 0 ? `
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Извлеченные значения:</div>
+              <div style="
+                background: white;
+                border: 1px solid #e8e8e8;
+                border-radius: 4px;
+                padding: 8px;
+                font-family: monospace;
+                font-size: 11px;
+                max-height: 120px;
+                overflow-y: auto;
+                color: #333;
+              ">
+                ${values.map((val, idx) => `<div style="margin-bottom: 2px;"><span style="color: #999;">[${idx + 1}]</span> "${val}"</div>`).join('')}
+                ${count > 5 ? `<div style="color: #999; font-style: italic;">... и ещё ${count - 5}</div>` : ''}
+              </div>
+            </div>
+          ` : ''}
+          ${count > 1 ? `
+            <button id="pcb-refine-selector" style="
+              background: #faad14;
+              color: white;
+              border: none;
+              padding: 6px 12px;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 12px;
+              font-weight: 600;
+            ">✨ Уточнить селектор</button>
+          ` : ''}
+        </div>
+      `;
+      
+      // Привязываем события к новым кнопкам
+      const copyBtn = resultsDiv.querySelector('#pcb-copy-selector');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(selector).then(() => {
+            this.showNotification('Селектор скопирован', 'success');
+          });
+        });
       }
-      return false;
+      
+      const refineBtn = resultsDiv.querySelector('#pcb-refine-selector');
+      if (refineBtn) {
+        refineBtn.addEventListener('click', () => this.refineSelector(selector));
+      }
+      
+    } catch (error) {
+      resultsDiv.innerHTML = `
+        <div style="padding: 12px; background: #fff2f0; border: 1px solid #ffccc7; border-radius: 6px; margin-top: 8px;">
+          <div style="color: #ff4d4f; font-weight: 600; font-size: 13px;">❌ Ошибка CSS селектора</div>
+          <div style="color: #999; font-size: 12px; margin-top: 4px;">${(error as Error).message}</div>
+        </div>
+      `;
+    }
+  }
+  
+  private refineSelector(baseSelector: string): void {
+    // Простой рефайнмент: добавляем :nth-child(1) к последнему элементу
+    const segments = baseSelector.split(' > ');
+    const lastSegment = segments[segments.length - 1];
+    
+    if (!lastSegment.includes(':nth-child')) {
+      const refined = baseSelector + ':nth-child(1)';
+      const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
+      if (primaryInput) {
+        primaryInput.value = refined;
+        this.performDetailedPreview(); // Перезапускаем предпросмотр
+      }
     }
   }
 
@@ -1138,7 +1278,7 @@ export class ConfigSidebar {
     const primary = primaryInput?.value?.trim() ?? '';
     const type = typeSelect?.value ?? 'text';
     const attribute = type === 'attribute' ? (attrInput?.value?.trim() ?? 'value') : undefined;
-    const fallback = Array.from(fallbackInputs).map(input => input.value.trim()).filter(v => v);
+    const fallbackList = Array.from(fallbackInputs).map(input => input.value.trim()).filter(v => v);
 
     if (!primary) {
       this.showNotification('Введите основной селектор', 'error');
@@ -1149,7 +1289,7 @@ export class ConfigSidebar {
       primary,
       type: type as any,
       ...(attribute ? { attribute } : {}),
-      ...(fallback.length > 0 ? { fallback } : {})
+      ...(fallbackList.length > 0 ? { fallback: fallbackList } : {})
     };
 
     this.onMessage({
@@ -1169,17 +1309,14 @@ export class ConfigSidebar {
     const attrInput = this.sidebarElement?.querySelector('#pcb-attribute-name') as HTMLInputElement | null;
     const attrWrap = this.sidebarElement?.querySelector('#pcb-attribute-wrap') as HTMLElement | null;
     const fallbackList = this.sidebarElement?.querySelector('#pcb-fallback-list') as HTMLElement | null;
-    const previewStatus = this.sidebarElement?.querySelector('#pcb-preview-status') as HTMLElement | null;
+    const resultsDiv = this.sidebarElement?.querySelector('#pcb-preview-results') as HTMLElement | null;
 
     if (primaryInput) primaryInput.value = '';
     if (typeSelect) typeSelect.value = 'text';
     if (attrInput) attrInput.value = 'value';
     if (attrWrap) attrWrap.style.display = 'none';
     if (fallbackList) fallbackList.innerHTML = '<div style="text-align: center; padding: 20px; color: #999; font-size: 13px;">Fallback селекторы отсутствуют</div>';
-    if (previewStatus) {
-      previewStatus.textContent = '';
-      previewStatus.style.color = '#666';
-    }
+    if (resultsDiv) resultsDiv.innerHTML = '';
   }
 
   private addFallbackSelector(): void {
@@ -1221,6 +1358,8 @@ export class ConfigSidebar {
     const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
     if (primaryInput && selectorData.selector) {
       primaryInput.value = selectorData.selector;
+      // Автоматически запускаем предпросмотр
+      setTimeout(() => this.performDetailedPreview(), 100);
     }
   }
 
