@@ -1,237 +1,323 @@
 /**
- * Config Sidebar - заглушка для взаимодействия с React sidebar
+ * Config Sidebar - боковая панель управления конфигурацией
  */
 
-import type { 
-  ElementSelectedMessage, 
-  ParserConfig, 
-  TestResult 
-} from '@/types';
+import type { ParserConfig, ElementSelectedMessage } from '@/types';
 
-/**
- * Временная заглушка для config sidebar
- * Будет заменена на полноценный React компонент
- */
 export class ConfigSidebar {
   private isVisible = false;
+  private sidebarElement: HTMLElement | null = null;
   private currentConfig: ParserConfig | null = null;
-  
+
   constructor() {
-    // Используем поля для избежания TS6133
-    void this.isVisible;
-    void this.currentConfig;
+    console.log('ConfigSidebar: Initialized');
   }
 
   /**
-   * Показать боковую панель
+   * Показать сайдбар
    */
-  show(): void {
+  public show(): void {
+    if (this.isVisible) return;
+
+    this.createSidebar();
     this.isVisible = true;
-    console.log('Config Sidebar: Show');
     
-    // TODO: Инжекция React компонента
-    this.createPlaceholder();
+    console.log('ConfigSidebar: Shown');
   }
 
   /**
-   * Скрыть боковую панель
+   * Скрыть сайдбар
    */
-  hide(): void {
+  public hide(): void {
+    if (!this.isVisible || !this.sidebarElement) return;
+
+    this.sidebarElement.remove();
+    this.sidebarElement = null;
     this.isVisible = false;
-    console.log('Config Sidebar: Hide');
     
-    this.removePlaceholder();
+    console.log('ConfigSidebar: Hidden');
   }
 
   /**
    * Обновить конфиг
    */
-  updateConfig(config: ParserConfig): void {
+  public updateConfig(config: ParserConfig): void {
     this.currentConfig = config;
-    console.log('Config Sidebar: Config updated', config);
+    
+    if (this.isVisible) {
+      this.updateSidebarContent();
+    }
+    
+    console.log('ConfigSidebar: Config updated', config.platform.name);
   }
 
   /**
    * Уведомить о выбранном элементе
    */
-  notifyElementSelected(message: ElementSelectedMessage): void {
-    console.log('Config Sidebar: Element selected', message);
+  public notifyElementSelected(message: ElementSelectedMessage): void {
+    console.log('ConfigSidebar: Element selected notification', message);
     
-    // Временно показываем информацию в консоли
-    this.showElementSelectedNotification(message);
+    this.showNotification(
+      `✅ Элемент выбран для поля "${message.fieldName}"`,
+      'success'
+    );
+    
+    this.addToSelectionHistory(message);
   }
 
   /**
-   * Уведомить об отмене выделения
+   * Уведомить об отмене выбора
    */
-  notifySelectionCancelled(fieldName: string): void {
-    console.log('Config Sidebar: Selection cancelled for field:', fieldName);
+  public notifySelectionCancelled(fieldName: string): void {
+    console.log('ConfigSidebar: Selection cancelled for field', fieldName);
+    
+    this.showNotification(
+      `❌ Выбор элемента для поля "${fieldName}" отменён`,
+      'warning'
+    );
   }
 
   /**
-   * Показать результаты тестирования
+   * Уведомить о результатах теста
    */
-  notifyTestResults(results: TestResult[]): void {
-    console.log('Config Sidebar: Test results', results);
-    
-    // Временно показываем уведомление
-    this.showTestResultsNotification(results);
-  }
-
-  /**
-   * Создать временный placeholder UI
-   */
-  private createPlaceholder(): void {
-    if (document.getElementById('pcb-sidebar-placeholder')) return;
-    
-    const placeholder = document.createElement('div');
-    placeholder.id = 'pcb-sidebar-placeholder';
-    placeholder.className = 'pcb-sidebar pcb-ui';
-    placeholder.innerHTML = `
-      <div style="
-        position: fixed;
-        top: 0;
-        right: 0;
-        width: 400px;
-        height: 100vh;
-        background: white;
-        box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
-        z-index: 10000000;
-        padding: 20px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        overflow-y: auto;
-      ">
-        <h3 style="margin: 0 0 20px 0; color: #1890ff;">
-          🛠️ Parser Config Builder
-        </h3>
-        
-        <div style="margin-bottom: 20px;">
-          <strong>Платформа:</strong> ${window.location.hostname}<br>
-          <strong>URL:</strong> ${window.location.pathname}
-        </div>
-        
-        <div style="
-          background: #f5f5f5;
-          padding: 16px;
-          border-radius: 4px;
-          margin-bottom: 20px;
-          font-size: 14px;
-        ">
-          <div style="font-weight: 500; margin-bottom: 8px;">📋 Инструкция:</div>
-          <div>1. Нажмите Ctrl+Shift+E для выделения элементов</div>
-          <div>2. Кликните по элементу для выбора</div>
-          <div>3. ESC для отмены выделения</div>
-        </div>
-        
-        <div id="pcb-notifications" style="margin-bottom: 20px;"></div>
-        
-        <div style="
-          position: absolute;
-          bottom: 20px;
-          left: 20px;
-          right: 20px;
-          text-align: center;
-          color: #666;
-          font-size: 12px;
-        ">
-          React UI будет загружен позже
-        </div>
-      </div>
-    `;
-    
-    document.body.appendChild(placeholder);
-  }
-
-  /**
-   * Удалить placeholder
-   */
-  private removePlaceholder(): void {
-    const placeholder = document.getElementById('pcb-sidebar-placeholder');
-    if (placeholder) {
-      placeholder.remove();
-    }
-  }
-
-  /**
-   * Показать уведомление о выбранном элементе
-   */
-  private showElementSelectedNotification(message: ElementSelectedMessage): void {
-    const container = document.getElementById('pcb-notifications');
-    if (!container) return;
-    
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-      background: #f6ffed;
-      border: 1px solid #b7eb8f;
-      border-radius: 4px;
-      padding: 12px;
-      margin-bottom: 8px;
-      font-size: 14px;
-    `;
-    
-    notification.innerHTML = `
-      <div style="font-weight: 500; color: #52c41a; margin-bottom: 4px;">
-        ✅ Элемент выбран для поля "${message.fieldName}"
-      </div>
-      <div style="font-size: 12px; color: #666;">
-        <strong>Тег:</strong> ${message.element.tagName.toLowerCase()}<br>
-        <strong>Селектор:</strong> ${message.selector.selector}<br>
-        <strong>Текст:</strong> ${message.element.textContent?.substring(0, 50) || 'N/A'}
-      </div>
-    `;
-    
-    container.appendChild(notification);
-    
-    // Автоудаление через 5 секунд
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.remove();
-      }
-    }, 5000);
-  }
-
-  /**
-   * Показать уведомление о результатах тестирования
-   */
-  private showTestResultsNotification(results: TestResult[]): void {
-    const container = document.getElementById('pcb-notifications');
-    if (!container) return;
+  public notifyTestResults(results: any[]): void {
+    console.log('ConfigSidebar: Test results', results);
     
     const successCount = results.filter(r => r.success).length;
     const totalCount = results.length;
     
+    this.showNotification(
+      `🧪 Тест завершён: ${successCount}/${totalCount} селекторов работают`,
+      successCount === totalCount ? 'success' : 'warning'
+    );
+  }
+
+  /**
+   * Создать сайдбар
+   */
+  private createSidebar(): void {
+    if (this.sidebarElement) return;
+
+    this.sidebarElement = document.createElement('div');
+    this.sidebarElement.id = 'pcb-sidebar';
+    this.sidebarElement.className = 'pcb-sidebar pcb-ui';
+    
+    // Стили для сайдбара
+    this.sidebarElement.style.cssText = `
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 350px;
+      height: 100vh;
+      background: white;
+      border-left: 2px solid #1890ff;
+      box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+      z-index: 999998;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    `;
+
+    // Содержимое сайдбара
+    this.sidebarElement.innerHTML = `
+      <div class="pcb-sidebar-header" style="
+        padding: 16px;
+        background: #1890ff;
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      ">
+        <span>🛠️</span>
+        Parser Config Builder
+      </div>
+      
+      <div class="pcb-sidebar-content" style="
+        flex: 1;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      ">
+        <div class="pcb-status" style="
+          padding: 12px;
+          background: #f0f9f0;
+          border: 1px solid #52c41a;
+          border-radius: 6px;
+          color: #389e0d;
+          font-size: 14px;
+        ">
+          ✅ Расширение активно
+        </div>
+        
+        <div class="pcb-instructions" style="
+          padding: 12px;
+          background: #f0f8ff;
+          border: 1px solid #1890ff;
+          border-radius: 6px;
+          font-size: 14px;
+          line-height: 1.5;
+        ">
+          <strong>Как использовать:</strong><br>
+          • Наведите мышь на элемент<br>
+          • Кликните для выбора<br>
+          • <kbd>ESC</kbd> — отмена<br>
+          • <kbd>Enter</kbd> — выбрать наведённый
+        </div>
+        
+        <div class="pcb-config-info" id="pcb-config-info" style="
+          padding: 12px;
+          background: #fafafa;
+          border: 1px solid #d9d9d9;
+          border-radius: 6px;
+          font-size: 13px;
+        ">
+          Загрузка конфига...
+        </div>
+        
+        <div class="pcb-selection-history" id="pcb-selection-history" style="
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        ">
+          <div style="font-weight: 600; font-size: 14px; color: #666;">История выбора:</div>
+          <div class="pcb-history-list" style="
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          "></div>
+        </div>
+      </div>
+      
+      <div class="pcb-sidebar-footer" style="
+        padding: 16px;
+        border-top: 1px solid #f0f0f0;
+        background: #fafafa;
+      ">
+        <button class="pcb-btn-close" style="
+          width: 100%;
+          padding: 8px 16px;
+          background: #ff4d4f;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+        ">Закрыть</button>
+      </div>
+    `;
+
+    // Обработчик закрытия
+    const closeBtn = this.sidebarElement.querySelector('.pcb-btn-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hide());
+    }
+
+    document.body.appendChild(this.sidebarElement);
+    
+    // Обновляем содержимое
+    this.updateSidebarContent();
+  }
+
+  /**
+   * Обновить содержимое сайдбара
+   */
+  private updateSidebarContent(): void {
+    if (!this.sidebarElement) return;
+
+    const configInfo = this.sidebarElement.querySelector('#pcb-config-info');
+    if (configInfo && this.currentConfig) {
+      configInfo.innerHTML = `
+        <div><strong>Платформа:</strong> ${this.currentConfig.platform.name}</div>
+        <div><strong>Домен:</strong> ${this.currentConfig.platform.domain}</div>
+        <div><strong>Тип:</strong> ${this.currentConfig.pageType}</div>
+        <div><strong>Полей:</strong> ${this.currentConfig.schema.fields.length}</div>
+        <div><strong>Селекторов:</strong> ${Object.keys(this.currentConfig.selectors).length}</div>
+      `;
+    }
+  }
+
+  /**
+   * Показать уведомление
+   */
+  private showNotification(text: string, type: 'success' | 'error' | 'warning' = 'success'): void {
     const notification = document.createElement('div');
-    const isSuccess = successCount === totalCount;
+    notification.className = 'pcb-notification';
+    
+    const colors = {
+      success: { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
+      error: { bg: '#fff2f0', border: '#ff4d4f', text: '#cf1322' },
+      warning: { bg: '#fffbe6', border: '#faad14', text: '#d48806' }
+    };
+    
+    const color = colors[type];
     
     notification.style.cssText = `
-      background: ${isSuccess ? '#f6ffed' : '#fff2f0'};
-      border: 1px solid ${isSuccess ? '#b7eb8f' : '#ffccc7'};
-      border-radius: 4px;
-      padding: 12px;
-      margin-bottom: 8px;
+      position: fixed;
+      top: 20px;
+      right: 370px;
+      max-width: 300px;
+      padding: 12px 16px;
+      background: ${color.bg};
+      border: 1px solid ${color.border};
+      color: ${color.text};
+      border-radius: 6px;
       font-size: 14px;
+      z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     `;
     
-    notification.innerHTML = `
-      <div style="font-weight: 500; color: ${isSuccess ? '#52c41a' : '#ff4d4f'}; margin-bottom: 8px;">
-        ${isSuccess ? '✅' : '⚠️'} Тестирование завершено: ${successCount}/${totalCount}
-      </div>
-      <div style="font-size: 12px; color: #666;">
-        ${results.map(r => `
-          <div style="margin-bottom: 4px;">
-            ${r.success ? '✓' : '✗'} ${r.fieldName}: ${r.success ? r.extractedValue : r.error}
-          </div>
-        `).join('')}
-      </div>
-    `;
-    
-    container.appendChild(notification);
-    
-    // Автоудаление через 10 секунд
+    notification.textContent = text;
+    document.body.appendChild(notification);
+
+    // Удаляем через 4 секунды
     setTimeout(() => {
       if (notification.parentNode) {
         notification.remove();
       }
-    }, 10000);
+    }, 4000);
+  }
+
+  /**
+   * Добавить в историю выбора
+   */
+  private addToSelectionHistory(message: ElementSelectedMessage): void {
+    if (!this.sidebarElement) return;
+
+    const historyList = this.sidebarElement.querySelector('.pcb-history-list');
+    if (!historyList) return;
+
+    const historyItem = document.createElement('div');
+    historyItem.style.cssText = `
+      padding: 8px 12px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      font-size: 12px;
+      border-left: 3px solid #1890ff;
+    `;
+    
+    const time = new Date(message.timestamp).toLocaleTimeString();
+    historyItem.innerHTML = `
+      <div><strong>${message.fieldName}</strong></div>
+      <div style="color: #666; margin-top: 2px;">
+        ${message.element.tagName.toLowerCase()} • ${time}
+      </div>
+      <div style="color: #999; font-family: monospace; font-size: 11px; margin-top: 4px;">
+        ${message.selector.selector}
+      </div>
+    `;
+
+    historyList.appendChild(historyItem);
+
+    // Ограничиваем историю 10 записями
+    const items = historyList.children;
+    if (items.length > 10) {
+      items[0].remove();
+    }
   }
 }

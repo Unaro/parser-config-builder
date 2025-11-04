@@ -1,15 +1,9 @@
 /**
- * Element Selector - компонент для выбора элементов на странице
+ * Element Selector - интерактивное выделение элементов на странице
  */
 
 import type { GeneratedSelector } from '@/types';
-import { getBestSelector } from '@/utils/selector';
-import { 
-  highlightElement, 
-  unhighlightElement, 
-  clearAllHighlights,
-  isElementVisible 
-} from '@/utils/dom';
+import { generateSelectors, validateSelector } from '@/utils/selector';
 
 interface SelectionOptions {
   fieldName: string;
@@ -19,401 +13,309 @@ interface SelectionOptions {
 }
 
 export class ElementSelector {
-  private isSelecting = false;
+  private isActive = false;
   private currentOptions: SelectionOptions | null = null;
   private hoveredElement: Element | null = null;
-  private selectedElement: Element | null = null;
-  private abortController: AbortController | null = null;
+  private highlightedElements: Element[] = [];
 
   constructor() {
-    this.setupKeyboardShortcuts();
+    this.setupEventListeners();
+    console.log('ElementSelector: Initialized');
   }
 
   /**
    * Начать выделение элемента
    */
-  startSelection(options: SelectionOptions): void {
-    if (this.isSelecting) {
+  public startSelection(options: SelectionOptions): void {
+    if (this.isActive) {
       this.stopSelection();
     }
 
-    this.isSelecting = true;
+    this.isActive = true;
     this.currentOptions = options;
-    this.abortController = new AbortController();
     
-    // Очищаем предыдущие подсветки
-    clearAllHighlights();
+    // Добавляем визуальные индикаторы
+    document.body.classList.add('pcb-selecting');
     
-    // Добавляем обработчики событий
-    this.addEventListeners();
+    console.log(`ElementSelector: Started selection for field "${options.fieldName}"`);
     
-    // Показываем индикатор режима выделения
-    this.showSelectionIndicator();
-    
-    console.log(`Started element selection for field: ${options.fieldName}`);
+    // Показываем подсказку
+    this.showHint('Наведите на элемент и кликните для выбора. ESC - отмена.');
   }
 
   /**
-   * Остановить выделение элемента
+   * Остановить выделение
    */
-  stopSelection(): void {
-    if (!this.isSelecting) return;
+  public stopSelection(): void {
+    if (!this.isActive) return;
 
-    this.isSelecting = false;
-    
-    // Удаляем обработчики событий
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-    
-    // Очищаем состояние
-    this.clearHoverState();
-    this.clearSelectedState();
-    
-    // Скрываем индикатор
-    this.hideSelectionIndicator();
-    
+    this.isActive = false;
     this.currentOptions = null;
+    this.hoveredElement = null;
     
-    console.log('Stopped element selection');
+    // Убираем визуальные индикаторы
+    document.body.classList.remove('pcb-selecting');
+    this.clearAllHighlights();
+    this.hideHint();
+    
+    console.log('ElementSelector: Selection stopped');
   }
 
   /**
    * Подсветить элемент по селектору
    */
-  highlightBySelector(selector: string): void {
+  public highlightBySelector(selector: string): void {
+    this.clearAllHighlights();
+    
+    if (!validateSelector(selector)) {
+      console.warn('Invalid selector:', selector);
+      return;
+    }
+
     try {
-      clearAllHighlights();
-      
       const elements = document.querySelectorAll(selector);
       elements.forEach(element => {
-        if (isElementVisible(element)) {
-          highlightElement(element, 'pcb-highlight-selected');
-        }
+        element.classList.add('pcb-highlight-selected');
+        this.highlightedElements.push(element);
       });
       
-      if (elements.length === 0) {
-        console.warn(`No elements found for selector: ${selector}`);
-      }
+      console.log(`ElementSelector: Highlighted ${elements.length} elements for selector: ${selector}`);
     } catch (error) {
-      console.error(`Invalid selector: ${selector}`, error);
+      console.error('Failed to highlight by selector:', selector, error);
     }
   }
 
   /**
-   * Очистить все подсветки
+   * Убрать все подсветки
    */
-  clearAllHighlights(): void {
-    clearAllHighlights('pcb-highlight');
-    clearAllHighlights('pcb-highlight-hover');
-    clearAllHighlights('pcb-highlight-selected');
+  public clearAllHighlights(): void {
+    // Убираем классы подсветки
+    this.highlightedElements.forEach(element => {
+      element.classList.remove('pcb-highlight', 'pcb-highlight-hover', 'pcb-highlight-selected');
+    });
+    
+    // Очищаем массив
+    this.highlightedElements = [];
+    
+    // На всякий случай убираем подсветку со всех элементов
+    document.querySelectorAll('.pcb-highlight, .pcb-highlight-hover, .pcb-highlight-selected')
+      .forEach(element => {
+        element.classList.remove('pcb-highlight', 'pcb-highlight-hover', 'pcb-highlight-selected');
+      });
   }
 
   /**
-   * Добавить обработчики событий
+   * Настройка обработчиков событий
    */
-  private addEventListeners(): void {
-    if (!this.abortController) return;
-    
-    const { signal } = this.abortController;
+  private setupEventListeners(): void {
+    // Наведение мыши
+    document.addEventListener('mouseover', (event) => {
+      if (this.isActive) {
+        this.handleMouseOver(event);
+      }
+    }, true);
 
-    // Отслеживание наведения мыши
-    document.addEventListener('mouseover', this.handleMouseOver, { signal, capture: true });
-    document.addEventListener('mouseout', this.handleMouseOut, { signal, capture: true });
-    
-    // Клик для выбора элемента
-    document.addEventListener('click', this.handleClick, { signal, capture: true });
-    
-    // Клавиатурные сочетания
-    document.addEventListener('keydown', this.handleKeyDown, { signal, capture: true });
-    
-    // Предотвращаем контекстное меню
-    document.addEventListener('contextmenu', this.handleContextMenu, { signal, capture: true });
+    // Уход мыши
+    document.addEventListener('mouseout', (event) => {
+      if (this.isActive) {
+        this.handleMouseOut(event);
+      }
+    }, true);
+
+    // Клик
+    document.addEventListener('click', (event) => {
+      if (this.isActive) {
+        this.handleClick(event);
+      }
+    }, true);
+
+    // Клавиши
+    document.addEventListener('keydown', (event) => {
+      if (this.isActive) {
+        this.handleKeyDown(event);
+      }
+    }, true);
   }
 
   /**
-   * Обработчик наведения мыши
+   * Обработка наведения мыши
    */
-  private handleMouseOver = (event: MouseEvent): void => {
-    if (!this.isSelecting) return;
-    
-    event.stopPropagation();
-    
+  private handleMouseOver(event: MouseEvent): void {
     const target = event.target as Element;
     if (!target || target === this.hoveredElement) return;
-    
+
+    // Убираем предыдущую подсветку hover
+    if (this.hoveredElement) {
+      this.hoveredElement.classList.remove('pcb-highlight-hover');
+    }
+
     // Игнорируем элементы UI расширения
-    if (this.isExtensionElement(target)) return;
-    
-    // Очищаем предыдущую подсветку
-    this.clearHoverState();
-    
-    // Подсвечиваем новый элемент
+    if (target.closest('.pcb-sidebar') || target.classList.contains('pcb-ui')) {
+      return;
+    }
+
     this.hoveredElement = target;
-    highlightElement(target, 'pcb-highlight-hover');
-    
-    // Показываем информацию об элементе
-    this.showElementInfo(target);
-  };
+    target.classList.add('pcb-highlight-hover');
+  }
 
   /**
-   * Обработчик ухода мыши
+   * Обработка ухода мыши
    */
-  private handleMouseOut = (_event: MouseEvent): void => {
-    if (!this.isSelecting) return;
-    
-    // Не убираем подсветку сразу, только при наведении на новый элемент
-  };
+  private handleMouseOut(event: MouseEvent): void {
+    const target = event.target as Element;
+    if (!target) return;
+
+    target.classList.remove('pcb-highlight-hover');
+  }
 
   /**
-   * Обработчик клика
+   * Обработка клика
    */
-  private handleClick = (event: MouseEvent): void => {
-    if (!this.isSelecting || !this.currentOptions) return;
-    
+  private handleClick(event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
-    
+
     const target = event.target as Element;
-    if (!target || this.isExtensionElement(target)) return;
-    
+    if (!target) return;
+
+    // Игнорируем элементы UI расширения
+    if (target.closest('.pcb-sidebar') || target.classList.contains('pcb-ui')) {
+      return;
+    }
+
     this.selectElement(target);
-  };
+  }
+
+  /**
+   * Обработка клавиш
+   */
+  private handleKeyDown(event: KeyboardEvent): void {
+    switch (event.key) {
+      case 'Escape':
+        event.preventDefault();
+        this.cancelSelection();
+        break;
+
+      case 'Enter':
+        event.preventDefault();
+        if (this.hoveredElement) {
+          this.selectElement(this.hoveredElement);
+        }
+        break;
+    }
+  }
 
   /**
    * Выбрать элемент
    */
-  private selectElement(target: Element): void {
-    if (!this.currentOptions) return;
-    
-    // Генерируем селектор для выбранного элемента
-    const selector = getBestSelector(target);
-    if (!selector) {
-      console.error('Failed to generate selector for element:', target);
+  private selectElement(element: Element): void {
+    // Генерируем селекторы
+    const selectors = generateSelectors(element);
+    const bestSelector = selectors[0];
+
+    if (!bestSelector) {
+      console.error('ElementSelector: Failed to generate selector for element', element);
+      this.showError('Не удалось создать селектор для элемента');
       return;
     }
-    
-    // Подсвечиваем выбранный элемент
-    this.clearHoverState();
-    this.selectedElement = target;
-    highlightElement(target, 'pcb-highlight-selected');
-    
-    // Уведомляем о выборе
-    this.currentOptions.onElementSelected(target, selector);
-    
+
+    // Подсвечиваем как выбранный
+    this.clearAllHighlights();
+    element.classList.add('pcb-highlight-selected');
+    this.highlightedElements.push(element);
+
+    console.log('ElementSelector: Element selected', {
+      element,
+      selector: bestSelector,
+      fieldName: this.currentOptions?.fieldName
+    });
+
+    // Уведомляем parent
+    if (this.currentOptions) {
+      this.currentOptions.onElementSelected(element, bestSelector);
+    }
+
     // Останавливаем выделение
     this.stopSelection();
   }
 
   /**
-   * Обработчик клавиатуры
+   * Отменить выделение
    */
-  private handleKeyDown = (event: KeyboardEvent): void => {
-    if (!this.isSelecting || !this.currentOptions) return;
+  private cancelSelection(): void {
+    console.log('ElementSelector: Selection cancelled');
     
-    switch (event.code) {
-      case 'Escape':
-        event.preventDefault();
-        this.currentOptions.onSelectionCancelled();
-        this.stopSelection();
-        break;
-        
-      case 'Enter':
-        if (this.hoveredElement) {
-          event.preventDefault();
-          // Прямой вызов логики выбора элемента
-          this.selectElement(this.hoveredElement);
-        }
-        break;
+    if (this.currentOptions) {
+      this.currentOptions.onSelectionCancelled();
     }
-  };
+    
+    this.stopSelection();
+  }
 
   /**
-   * Обработчик контекстного меню
+   * Показать подсказку
    */
-  private handleContextMenu = (event: MouseEvent): void => {
-    if (this.isSelecting) {
-      event.preventDefault();
-    }
-  };
+  private showHint(text: string): void {
+    const existing = document.getElementById('pcb-hint');
+    if (existing) existing.remove();
+
+    const hint = document.createElement('div');
+    hint.id = 'pcb-hint';
+    hint.className = 'pcb-hint';
+    hint.textContent = text;
+    hint.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      z-index: 999999;
+      pointer-events: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+
+    document.body.appendChild(hint);
+  }
 
   /**
-   * Настройка клавиатурных сочетаний
+   * Скрыть подсказку
    */
-  private setupKeyboardShortcuts(): void {
-    // Глобальные сочетания (всегда активны)
-    document.addEventListener('keydown', (event) => {
-      // Ctrl/Cmd + Shift + E - включить/выключить режим выделения
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'KeyE') {
-        event.preventDefault();
-        
-        if (this.isSelecting) {
-          this.currentOptions?.onSelectionCancelled();
-          this.stopSelection();
-        } else {
-          // Запрос начала выделения через сообщение
-          console.log('Selection shortcut triggered');
-        }
+  private hideHint(): void {
+    const hint = document.getElementById('pcb-hint');
+    if (hint) hint.remove();
+  }
+
+  /**
+   * Показать ошибку
+   */
+  private showError(text: string): void {
+    const error = document.createElement('div');
+    error.className = 'pcb-error';
+    error.textContent = text;
+    error.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #ff4d4f;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    `;
+
+    document.body.appendChild(error);
+
+    // Удаляем через 3 секунды
+    setTimeout(() => {
+      if (error.parentNode) {
+        error.remove();
       }
-    });
-  }
-
-  /**
-   * Показать индикатор режима выделения
-   */
-  private showSelectionIndicator(): void {
-    if (document.getElementById('pcb-selection-indicator')) return;
-    
-    const indicator = document.createElement('div');
-    indicator.id = 'pcb-selection-indicator';
-    indicator.innerHTML = `
-      <div style="
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #1890ff;
-        color: white;
-        padding: 12px 16px;
-        border-radius: 6px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 14px;
-        font-weight: 500;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        z-index: 10000000;
-        pointer-events: none;
-        animation: pcb-fade-in 0.3s ease-out;
-      ">
-        🎯 Выберите элемент для поля "${this.currentOptions?.fieldName}"
-        <div style="font-size: 12px; margin-top: 4px; opacity: 0.9;">
-          ESC - отмена | Enter - выбрать наведенный
-        </div>
-      </div>
-    `;
-    
-    // Добавляем CSS анимацию
-    if (!document.getElementById('pcb-animations')) {
-      const style = document.createElement('style');
-      style.id = 'pcb-animations';
-      style.textContent = `
-        @keyframes pcb-fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes pcb-fade-out {
-          from { opacity: 1; transform: translateY(0); }
-          to { opacity: 0; transform: translateY(-10px); }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
-    document.body.appendChild(indicator);
-  }
-
-  /**
-   * Скрыть индикатор режима выделения
-   */
-  private hideSelectionIndicator(): void {
-    const indicator = document.getElementById('pcb-selection-indicator');
-    if (indicator) {
-      indicator.remove();
-    }
-  }
-
-  /**
-   * Показать информацию об элементе
-   */
-  private showElementInfo(element: Element): void {
-    const info = this.getElementInfo(element);
-    
-    // Обновляем или создаем информационную панель
-    let infoPanel = document.getElementById('pcb-element-info');
-    
-    if (!infoPanel) {
-      infoPanel = document.createElement('div');
-      infoPanel.id = 'pcb-element-info';
-      document.body.appendChild(infoPanel);
-    }
-    
-    infoPanel.innerHTML = `
-      <div style="
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        background: rgba(0, 0, 0, 0.9);
-        color: white;
-        padding: 12px 16px;
-        border-radius: 6px;
-        font-family: monospace;
-        font-size: 12px;
-        max-width: 400px;
-        z-index: 10000000;
-        pointer-events: none;
-      ">
-        <div style="margin-bottom: 8px; font-weight: bold;">${info.tagName}</div>
-        ${info.classes ? `<div>Classes: ${info.classes}</div>` : ''}
-        ${info.id ? `<div>ID: ${info.id}</div>` : ''}
-        ${info.text ? `<div>Text: ${info.text}</div>` : ''}
-      </div>
-    `;
-  }
-
-  /**
-   * Получить информацию об элементе с правильной типизацией
-   */
-  private getElementInfo(element: Element): {
-    tagName: string;
-    classes?: string | undefined;
-    id?: string | undefined;
-    text?: string | undefined;
-  } {
-    const className = element.className;
-    const elementId = element.id;
-    const textContent = element.textContent?.trim();
-    
-    return {
-      tagName: element.tagName.toLowerCase(),
-      classes: className ? className.toString().trim() : undefined,
-      id: elementId || undefined,
-      text: textContent && textContent.length > 0 ? textContent.substring(0, 50) : undefined
-    };
-  }
-
-  /**
-   * Проверить, является ли элемент частью UI расширения
-   */
-  private isExtensionElement(element: Element): boolean {
-    return element.closest('.pcb-sidebar') !== null ||
-           element.closest('#pcb-selection-indicator') !== null ||
-           element.closest('#pcb-element-info') !== null ||
-           element.id?.startsWith('pcb-') === true ||
-           element.classList.contains('pcb-ui');
-  }
-
-  /**
-   * Очистить состояние наведения
-   */
-  private clearHoverState(): void {
-    if (this.hoveredElement) {
-      unhighlightElement(this.hoveredElement, 'pcb-highlight-hover');
-      this.hoveredElement = null;
-    }
-    
-    const infoPanel = document.getElementById('pcb-element-info');
-    if (infoPanel) {
-      infoPanel.remove();
-    }
-  }
-
-  /**
-   * Очистить состояние выбора
-   */
-  private clearSelectedState(): void {
-    if (this.selectedElement) {
-      unhighlightElement(this.selectedElement, 'pcb-highlight-selected');
-      this.selectedElement = null;
-    }
+    }, 3000);
   }
 }
