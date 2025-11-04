@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parser Config Builder - Настройки</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <span class="logo-icon">🔧</span>
+          <div class="logo-text">
+            <h1>Parser Config Builder</h1>
+            <p>Настройки расширения</p>
+          </div>
+        </div>
+        <div class="version">v1.0.0</div>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- Навигация -->
+      <nav class="sidebar">
+        <div class="nav-section">
+          <h3>Основное</h3>
+          <button class="nav-btn active" data-section="general">
+            <span class="nav-icon">⚙️</span>
+            Общие настройки
+          </button>
+          <button class="nav-btn" data-section="appearance">
+            <span class="nav-icon">🎨</span>
+            Внешний вид
+          </button>
+        </div>
+        
+        <div class="nav-section">
+          <h3>Конфигурации</h3>
+          <button class="nav-btn" data-section="configs">
+            <span class="nav-icon">📁</span>
+            Управление конфигами
+          </button>
+          <button class="nav-btn" data-section="export">
+            <span class="nav-icon">📦</span>
+            Экспорт / Импорт
+          </button>
+        </div>
+        
+        <div class="nav-section">
+          <h3>Помощь</h3>
+          <button class="nav-btn" data-section="help">
+            <span class="nav-icon">❓</span>
+            Справка
+          </button>
+        </div>
+      </nav>
+
+      <!-- Основной контент -->
+      <main class="main">
+        <!-- Общие настройки -->
+        <section id="section-general" class="section active">
+          <div class="section-header">
+            <h2>Общие настройки</h2>
+            <p>Основные параметры работы расширения</p>
+          </div>
+
+          <div class="settings-group">
+            <h3>Поведение Sidebar</h3>
+            
+            <div class="setting-item">
+              <label class="setting-label">
+                <input type="checkbox" id="auto-open-selector-editor" checked>
+                <span class="checkmark"></span>
+                Автоматически открывать редактор селектора
+              </label>
+              <p class="setting-description">После выбора элемента автоматически переходить к настройке селектора</p>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label">
+                <input type="checkbox" id="close-popup-on-selection" checked>
+                <span class="checkmark"></span>
+                Закрывать popup при быстром выборе
+              </label>
+              <p class="setting-description">Автоматически закрывать окно popup после запуска режима выбора</p>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label-inline">
+                Максимум элементов в истории:
+                <input type="number" id="history-limit" min="5" max="50" value="10" style="width: 80px; margin-left: 8px;">
+              </label>
+              <p class="setting-description">Количество записей в истории выбора элементов</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Внешний вид -->
+        <section id="section-appearance" class="section">
+          <div class="section-header">
+            <h2>Внешний вид</h2>
+            <p>Настройки отображения и подсветки элементов</p>
+          </div>
+
+          <div class="settings-group">
+            <h3>Подсветка элементов</h3>
+            
+            <div class="setting-item">
+              <label class="setting-label-inline">
+                Цвет подсветки:
+                <input type="color" id="highlight-color" value="#1890ff" style="margin-left: 8px;">
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <label class="setting-label-inline">
+                Толщина обводки:
+                <select id="highlight-width" style="margin-left: 8px;">
+                  <option value="2">2px - тонкая</option>
+                  <option value="3" selected>3px - средняя</option>
+                  <option value="4">4px - толстая</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="setting-item">
+              <div class="preview-box" id="highlight-preview">
+                <div class="preview-element">Предпросмотр подсветки</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Управление конфигами -->
+        <section id="section-configs" class="section">
+          <div class="section-header">
+            <h2>Управление конфигами</h2>
+            <p>Просмотр и редактирование сохранённых конфигураций</p>
+          </div>
+
+          <div class="settings-group">
+            <div class="toolbar">
+              <button id="refresh-configs-btn" class="btn btn--secondary">
+                🔄 Обновить список
+              </button>
+              <button id="test-all-configs-btn" class="btn btn--outline">
+                🧪 Протестировать все
+              </button>
+            </div>
+            
+            <div class="configs-list" id="configs-list">
+              <div class="loading-placeholder">
+                🔄 Загрузка конфигураций...
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Экспорт/Импорт -->
+        <section id="section-export" class="section">
+          <div class="section-header">
+            <h2>Экспорт и Импорт</h2>
+            <p>Сохранение и восстановление конфигураций</p>
+          </div>
+
+          <div class="settings-group">
+            <h3>Экспорт</h3>
+            
+            <div class="export-options">
+              <button id="export-all-btn" class="btn btn--primary btn--large">
+                📦 Экспортировать все конфиги
+              </button>
+              <p class="help-text">Сохраняет все конфигурации в один ZIP-архив</p>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3>Импорт</h3>
+            
+            <div class="import-area">
+              <input type="file" id="import-file" accept=".json,.zip" style="display: none;">
+              <button id="import-btn" class="btn btn--outline btn--large">
+                📎 Выбрать файл для импорта
+              </button>
+              <p class="help-text">Поддерживаются файлы: JSON (один конфиг) и ZIP (несколько)</p>
+            </div>
+            
+            <div id="import-progress" class="import-progress hidden">
+              <div class="progress-bar">
+                <div class="progress-fill" id="import-progress-fill"></div>
+              </div>
+              <div class="progress-text" id="import-progress-text">Обработка...</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Справка -->
+        <section id="section-help" class="section">
+          <div class="section-header">
+            <h2>Справка и документация</h2>
+            <p>Руководство по использованию расширения</p>
+          </div>
+
+          <div class="help-content">
+            <div class="help-section">
+              <h3>🚀 Как начать</h3>
+              <ol class="help-list">
+                <li>Откройте сайт, с которого нужно собирать данные</li>
+                <li>Нажмите на иконку расширения и нажмите "Активировать"</li>
+                <li>Справа появится Sidebar - панель настроек</li>
+                <li>Перейдите на вкладку "Схема" и добавьте поля</li>
+                <li>Кликните "Привязать" у поля и выберите элемент на странице</li>
+                <li>Настройте селектор в открывшемся редакторе</li>
+                <li>Протестируйте конфиг кнопкой "Тест"</li>
+                <li>Экспортируйте готовый конфиг</li>
+              </ol>
+            </div>
+
+            <div class="help-section">
+              <h3>🎯 Быстрые действия</h3>
+              <ul class="help-list">
+                <li><strong>Быстрый выбор</strong> - мгновенно запускает режим выбора элемента</li>
+                <li><strong>ESC</strong> - отменить выбор элемента</li>
+                <li><strong>Клик</strong> - выбрать элемент под курсором</li>
+              </ul>
+            </div>
+
+            <div class="help-section">
+              <h3>🔗 Полезные ссылки</h3>
+              <div class="links">
+                <a href="https://github.com/Unaro/parser-config-builder" target="_blank" class="help-link">
+                  📚 Документация на GitHub
+                </a>
+                <a href="chrome://extensions/shortcuts" target="_blank" class="help-link">
+                  ⌨️ Настройка горячих клавиш
+                </a>
+                <a href="#" id="open-dev-tools" class="help-link">
+                  🔧 Открыть DevTools
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Статусбар -->
+    <footer class="statusbar">
+      <div class="statusbar-item">
+        <span id="total-configs">0</span> конфигураций
+      </div>
+      <div class="statusbar-item">
+        <span id="last-updated">Никогда</span>
+      </div>
+      <div class="statusbar-item" id="connection-status">
+        🔄 Проверка соединения...
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
