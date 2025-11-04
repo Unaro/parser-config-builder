@@ -1,4 +1,4 @@
-/* Основные стили Popup */
+/* Основные стили Popup с расширенными статусами */
 * {
   margin: 0;
   padding: 0;
@@ -61,7 +61,7 @@ body {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 /* Информация о сайте */
@@ -92,6 +92,66 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Статус расширения */
+.extension-status {
+  background: #fff7e6;
+  border: 1px solid #ffe58f;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  text-align: center;
+  color: #d46b08;
+}
+
+/* Статистика */
+.stats-section {
+  background: #f6ffed;
+  border: 1px solid #d9f7be;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #52c41a;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.status-indicators {
+  border-top: 1px solid #d9f7be;
+  padding-top: 12px;
+}
+
+.status-line {
+  font-size: 13px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-line:last-child {
+  margin-bottom: 0;
 }
 
 /* Индикатор статуса */
