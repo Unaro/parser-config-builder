@@ -1,5 +1,5 @@
 /**
- * Content Script - основной компонент для взаимодействия с DOM (deduped)
+ * Content Script - основной компонент для взаимодействия с DOM (с GET_STATUS/TOGGLE_ACTIVE)
  */
 
 import './content-styles.css';
@@ -13,6 +13,9 @@ import type {
   HighlightElementMessage,
   SaveConfigMessage,
   ElementSelectedMessage,
+  GetStatusMessage,
+  ToggleActiveMessage,
+  StatusResponse,
   ParserConfig
 } from '@/types';
 import { ElementSelector } from './element-selector';
@@ -24,6 +27,7 @@ class ParserConfigContentScript {
   private configSidebar: ConfigSidebar;
   private isActive = false;
   private currentConfig: ParserConfig | null = null;
+  private currentlySelectingField: string | null = null;
 
   constructor() {
     this.elementSelector = new ElementSelector();
@@ -63,6 +67,10 @@ class ParserConfigContentScript {
         return this.handleActivate(message as ActivateExtensionMessage);
       case 'DEACTIVATE_EXTENSION':
         return this.handleDeactivate();
+      case 'GET_STATUS':
+        return this.handleGetStatus(message as GetStatusMessage);
+      case 'TOGGLE_ACTIVE':
+        return this.handleToggleActive(message as ToggleActiveMessage);
       case 'START_SELECTION':
         return this.handleStartSelection(message as StartSelectionMessage);
       case 'STOP_SELECTION':
@@ -86,7 +94,30 @@ class ParserConfigContentScript {
     }
   }
 
-  // --- UPDATE handlers (single implementations) ---
+  // --- Новые статусные обработчики ---
+  private async handleGetStatus(message: GetStatusMessage): Promise<MessageResponse<StatusResponse>> {
+    const domain = window.location.hostname;
+    const status: StatusResponse = {
+      isActive: this.isActive,
+      hasSidebar: this.configSidebar && this.isActive, // Предполагаем, что сидбар появляется при активации
+      pageType: this.currentConfig?.pageType,
+      domain,
+      selectingField: this.currentlySelectingField,
+      fieldsCount: this.currentConfig?.schema.fields.length ?? 0,
+      selectorsCount: Object.keys(this.currentConfig?.selectors ?? {}).length
+    };
+    return { success: true, data: status };
+  }
+
+  private async handleToggleActive(message: ToggleActiveMessage): Promise<MessageResponse> {
+    if (this.isActive) {
+      return this.handleDeactivate();
+    } else {
+      return this.handleActivate({ ...message, type: 'ACTIVATE_EXTENSION' } as ActivateExtensionMessage);
+    }
+  }
+
+  // --- UPDATE handlers ---
   private async handleUpdateSchema(message: any): Promise<MessageResponse> {
     if (!this.currentConfig) return { success: false, error: 'Config not initialized' };
     this.currentConfig = { ...this.currentConfig, schema: message.schema };
@@ -112,7 +143,7 @@ class ParserConfigContentScript {
     return { success: true };
   }
 
-  // --- Existing methods ---
+  // --- Остальные обработчики ---
   private async handleActivate(message: ActivateExtensionMessage): Promise<MessageResponse> {
     if (this.isActive) return { success: true, data: 'Already active' };
     try {
@@ -130,6 +161,7 @@ class ParserConfigContentScript {
   private async handleDeactivate(): Promise<MessageResponse> {
     if (!this.isActive) return { success: true, data: 'Already inactive' };
     this.isActive = false;
+    this.currentlySelectingField = null;
     this.elementSelector.stopSelection();
     this.configSidebar.hide();
     this.elementSelector.clearAllHighlights();
@@ -140,17 +172,30 @@ class ParserConfigContentScript {
   private async handleStartSelection(message: StartSelectionMessage): Promise<MessageResponse> {
     if (!this.isActive) return { success: false, error: 'Extension not active' };
     const { fieldName, fieldType } = message;
+    this.currentlySelectingField = fieldName;
+    
+    // Показываем уведомление о режиме выбора
+    this.showSelectionModeNotification(fieldName);
+    
     this.elementSelector.startSelection({
       fieldName,
       fieldType,
-      onElementSelected: (element, selector) => this.handleElementSelected(fieldName, element, selector),
-      onSelectionCancelled: () => this.configSidebar.notifySelectionCancelled(fieldName)
+      onElementSelected: (element, selector) => {
+        this.currentlySelectingField = null;
+        this.handleElementSelected(fieldName, element, selector);
+      },
+      onSelectionCancelled: () => {
+        this.currentlySelectingField = null;
+        this.configSidebar.notifySelectionCancelled(fieldName);
+      }
     });
+
     return { success: true, data: `Selection started for field: ${fieldName}` };
   }
 
   private async handleStopSelection(): Promise<MessageResponse> {
     this.elementSelector.stopSelection();
+    this.currentlySelectingField = null;
     return { success: true, data: 'Selection stopped' };
   }
 
@@ -192,9 +237,82 @@ class ParserConfigContentScript {
     }
   }
 
+  // --- Вспомогательные методы ---
+  
+  private showSelectionModeNotification(fieldName: string): void {
+    const notification = document.createElement('div');
+    notification.id = 'pcb-selection-notification';
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, #1890ff 0%, #52c41a 100%);
+      color: white;
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      z-index: 999999;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      animation: slideInDown 0.3s ease-out;
+    `;
+    
+    notification.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 20px;">🎯</span>
+        <div>
+          <div>Режим выбора: <strong>${fieldName}</strong></div>
+          <div style="font-size: 13px; opacity: 0.9; margin-top: 4px;">
+            Кликните по элементу для выбора • ESC - отмена
+          </div>
+        </div>
+        <button style="
+          background: rgba(255,255,255,0.2);
+          border: none;
+          color: white;
+          width: 24px;
+          height: 24px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+        " onclick="this.parentElement.parentElement.remove()">×</button>
+      </div>
+    `;
+    
+    // Анимация
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideInDown {
+        from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+        to { transform: translateX(-50%) translateY(0); opacity: 1; }
+      }
+    `;
+    if (!document.getElementById('pcb-selection-animations')) {
+      style.id = 'pcb-selection-animations';
+      document.head.appendChild(style);
+    }
+    
+    // Удаляем предыдущее уведомление
+    const existing = document.getElementById('pcb-selection-notification');
+    if (existing) existing.remove();
+    
+    document.body.appendChild(notification);
+    
+    // Автоудаление через 10 секунд
+    setTimeout(() => {
+      if (notification.parentNode) notification.remove();
+    }, 10000);
+  }
+
   private setupElementSelector(): void { /* no-op */ }
 
   private handleElementSelected(fieldName: string, element: Element, selector: any): void {
+    // Убираем уведомление о режиме выбора
+    const notification = document.getElementById('pcb-selection-notification');
+    if (notification) notification.remove();
+    
     const message: ElementSelectedMessage = {
       type: 'ELEMENT_SELECTED',
       id: generateUniqueId(),
