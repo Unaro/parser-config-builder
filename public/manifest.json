@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "Parser Config Builder",
+  "version": "1.0.0",
+  "description": "Визуальное создание конфигураций парсеров для веб-сайтов манги и комиксов",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content-script.js"],
+    "css": ["content-styles.css"],
+    "run_at": "document_start"
+  }],
+  
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Parser Config Builder",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  
+  "web_accessible_resources": [{
+    "resources": ["sidebar.html", "sidebar.css"],
+    "matches": ["<all_urls>"]
+  }]
+}
