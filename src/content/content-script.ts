@@ -1,5 +1,5 @@
 /**
- * Content Script - основной компонент для взаимодействия с DOM (с улучшенным статусом)
+ * Content Script - основной компонент для взаимодействия с DOM (с улучшенным статусом) + FIX: добавлен обработчик CREATE_FIELD + CLEAR_HIGHLIGHTS
  */
 
 import './content-styles.css';
@@ -21,6 +21,7 @@ import type {
 import { ElementSelector } from './element-selector';
 import { ConfigSidebar } from './config-sidebar';
 import { generateUniqueId } from '@/utils';
+import { getDefaultSchemaField } from './config-sidebar-helpers';
 
 class ParserConfigContentScript {
   private elementSelector: ElementSelector;
@@ -79,10 +80,14 @@ class ParserConfigContentScript {
         return this.handleTestConfig(message as TestConfigMessage);
       case 'HIGHLIGHT_ELEMENT':
         return this.handleHighlightElement(message as HighlightElementMessage);
+      case 'CLEAR_HIGHLIGHTS':
+        return this.handleClearHighlights();
       case 'GET_CONFIG':
         return this.handleGetConfig();
       case 'SAVE_CONFIG':
         return this.handleSaveConfig(message as SaveConfigMessage);
+      case 'CREATE_FIELD': // НОВЫЙ ОБРАБОТЧИК ДЛЯ МОДАЛКИ "Добавить поле"
+        return this.handleCreateField(message as any);
       case 'UPDATE_SCHEMA':
         return this.handleUpdateSchema((message as any));
       case 'UPDATE_SELECTOR':
@@ -91,6 +96,56 @@ class ParserConfigContentScript {
         return this.handleUpdatePageType((message as any));
       default:
         return { success: false, error: 'Unknown message type' };
+    }
+  }
+
+  // НОВЫЙ ОБРАБОТЧИК ДЛЯ CREATE_FIELD
+  private async handleCreateField(message: any): Promise<MessageResponse> {
+    if (!this.currentConfig) return { success: false, error: 'Config not initialized' };
+    
+    const { field } = message;
+    if (!field?.name) return { success: false, error: 'Field name is required' };
+    
+    // Проверяем уникальность имени
+    const existingNames = this.currentConfig.schema.fields.map(f => f.name);
+    if (existingNames.includes(field.name)) {
+      return { success: false, error: 'Field with this name already exists' };
+    }
+    
+    // Добавляем поле к схеме
+    const newField = getDefaultSchemaField(field.name, field.type);
+    newField.required = field.required ?? false;
+    if (field.description) newField.description = field.description;
+    if (field.attribute) (newField as any).attribute = field.attribute;
+    
+    const newSchema = {
+      ...this.currentConfig.schema,
+      fields: [...this.currentConfig.schema.fields, newField],
+      metadata: {
+        ...this.currentConfig.schema.metadata,
+        fieldsCount: this.currentConfig.schema.fields.length + 1,
+        updatedAt: new Date().toISOString()
+      }
+    };
+    
+    this.currentConfig = { ...this.currentConfig, schema: newSchema };
+    await this.saveConfigToStorage(this.currentConfig);
+    this.configSidebar.updateConfig(this.currentConfig);
+    
+    return { success: true, data: `Field "${field.name}" created` };
+  }
+  
+  // НОВЫЙ ОБРАБОТЧИК ДЛЯ ОЧИСТКИ ПОДСВЕТОК
+  private async handleClearHighlights(): Promise<MessageResponse> {
+    try {
+      this.elementSelector.clearAllHighlights();
+      // Дополнительно: глобальная очистка всех .pcb-highlight* классов через ElementSelector
+      if (this.elementSelector.globalCleanup) {
+        this.elementSelector.globalCleanup();
+      }
+      return { success: true, data: 'All highlights cleared' };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
     }
   }
 
