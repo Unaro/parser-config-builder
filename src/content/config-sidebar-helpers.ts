@@ -68,9 +68,6 @@ export function getDefaultSchemaField(name: string, type: string = 'string'): Sc
     type: type as any,
     required: false,
     description: `Поле ${name}`,
-    validation: {
-      type: type as any
-    },
     metadata: {
       addedAt: new Date().toISOString(),
       source: 'manual'
