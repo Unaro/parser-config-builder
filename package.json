@@ -1,0 +1,45 @@
+{
+  "name": "parser-config-builder",
+  "version": "1.0.0",
+  "description": "Visual browser extension for creating parser configurations for manga/comic sites",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "tsc && vite build",
+    "build:firefox": "vite build --mode firefox",
+    "package:chrome": "web-ext build --source-dir dist/ --artifacts-dir packages/",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["browser-extension", "parser", "manga", "scraping", "config-builder"],
+  "author": "Unaro",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "antd": "^5.12.8",
+    "@ant-design/icons": "^5.2.6",
+    "zod": "^3.22.4",
+    "uuid": "^9.0.1",
+    "file-saver": "^2.0.5",
+    "lodash-es": "^4.17.21",
+    "clsx": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@types/chrome": "^0.0.251",
+    "@types/lodash-es": "^4.17.12",
+    "@types/uuid": "^9.0.7",
+    "@types/file-saver": "^2.0.7",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "web-ext": "^7.9.0"
+  }
+}
