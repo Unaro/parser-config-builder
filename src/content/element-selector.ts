@@ -1,5 +1,5 @@
 /**
- * Element Selector - интерактивное выделение элементов на странице
+ * Element Selector - интерактивное выделение элементов на странице (исправлена генерация селектора)
  */
 
 import type { GeneratedSelector } from '@/types';
@@ -12,11 +12,21 @@ interface SelectionOptions {
   onSelectionCancelled: () => void;
 }
 
+/**
+ * Кэш селекторов для элементов (чтобы генерировать до добавления CSS классов)
+ */
+interface ElementSelectorCache {
+  element: Element;
+  selector: GeneratedSelector;
+  timestamp: number;
+}
+
 export class ElementSelector {
   private isActive = false;
   private currentOptions: SelectionOptions | null = null;
   private hoveredElement: Element | null = null;
   private highlightedElements: Element[] = [];
+  private selectorCache = new Map<Element, ElementSelectorCache>();
 
   constructor() {
     this.setupEventListeners();
@@ -33,6 +43,7 @@ export class ElementSelector {
 
     this.isActive = true;
     this.currentOptions = options;
+    this.selectorCache.clear(); // Очищаем кэш при новом выборе
     
     // Добавляем визуальные индикаторы
     document.body.classList.add('pcb-selecting');
@@ -52,6 +63,7 @@ export class ElementSelector {
     this.isActive = false;
     this.currentOptions = null;
     this.hoveredElement = null;
+    this.selectorCache.clear();
     
     // Убираем визуальные индикаторы
     document.body.classList.remove('pcb-selecting');
@@ -138,7 +150,7 @@ export class ElementSelector {
   }
 
   /**
-   * Обработка наведения мыши
+   * Обработка наведения мыши - генерируем селектор ДО подсветки
    */
   private handleMouseOver(event: MouseEvent): void {
     const target = event.target as Element;
@@ -154,8 +166,73 @@ export class ElementSelector {
       return;
     }
 
+    // КРИТИЧНО: Генерируем селектор ПЕРЕД добавлением CSS классов
+    this.preGenerateSelector(target);
+
+    // Теперь безопасно подсвечиваем
     this.hoveredElement = target;
     target.classList.add('pcb-highlight-hover');
+  }
+
+  /**
+   * Предгенерация селектора для элемента (до добавления служебных CSS классов)
+   */
+  private preGenerateSelector(element: Element): void {
+    // Проверяем, есть ли уже в кэше
+    if (this.selectorCache.has(element)) {
+      return;
+    }
+
+    try {
+      // Клонируем элемент для генерации "чистого" селектора
+      const cleanElement = this.getCleanElement(element);
+      const selectors = generateSelectors(cleanElement);
+      const bestSelector = selectors[0];
+
+      if (bestSelector) {
+        this.selectorCache.set(element, {
+          element,
+          selector: bestSelector,
+          timestamp: Date.now()
+        });
+        
+        console.log('ElementSelector: Pre-generated selector:', {
+          element: element.tagName,
+          selector: bestSelector.selector,
+          confidence: bestSelector.confidence
+        });
+      }
+    } catch (error) {
+      console.error('ElementSelector: Failed to pre-generate selector:', error);
+    }
+  }
+
+  /**
+   * Получить "чистый" элемент без служебных CSS классов расширения
+   */
+  private getCleanElement(element: Element): Element {
+    const clone = element.cloneNode(true) as Element;
+    
+    // Убираем все служебные классы расширения
+    const extensionClasses = [
+      'pcb-highlight',
+      'pcb-highlight-hover', 
+      'pcb-highlight-selected',
+      'pcb-ui'
+    ];
+    
+    extensionClasses.forEach(className => {
+      clone.classList.remove(className);
+    });
+    
+    // Убираем служебные классы с потомков
+    clone.querySelectorAll('*').forEach(child => {
+      extensionClasses.forEach(className => {
+        child.classList.remove(className);
+      });
+    });
+    
+    return clone;
   }
 
   /**
@@ -206,33 +283,35 @@ export class ElementSelector {
   }
 
   /**
-   * Выбрать элемент
+   * Выбрать элемент (использует кэшированный селектор)
    */
   private selectElement(element: Element): void {
-    // Генерируем селекторы
-    const selectors = generateSelectors(element);
-    const bestSelector = selectors[0];
-
-    if (!bestSelector) {
-      console.error('ElementSelector: Failed to generate selector for element', element);
-      this.showError('Не удалось создать селектор для элемента');
+    // Получаем селектор из кэша
+    const cached = this.selectorCache.get(element);
+    
+    if (!cached) {
+      console.error('ElementSelector: No cached selector for element', element);
+      this.showError('Селектор не был предварительно сгенерирован');
       return;
     }
 
-    // Подсвечиваем как выбранный
+    const { selector } = cached;
+
+    // Подсвечиваем как выбранный (БЕЗ влияния на селектор)
     this.clearAllHighlights();
     element.classList.add('pcb-highlight-selected');
     this.highlightedElements.push(element);
 
-    console.log('ElementSelector: Element selected', {
-      element,
-      selector: bestSelector,
+    console.log('ElementSelector: Element selected with cached selector', {
+      element: element.tagName,
+      selector: selector.selector,
+      confidence: selector.confidence,
       fieldName: this.currentOptions?.fieldName
     });
 
-    // Уведомляем parent
+    // Уведомляем parent с чистым селектором
     if (this.currentOptions) {
-      this.currentOptions.onElementSelected(element, bestSelector);
+      this.currentOptions.onElementSelected(element, selector);
     }
 
     // Останавливаем выделение
@@ -317,5 +396,19 @@ export class ElementSelector {
         error.remove();
       }
     }, 3000);
+  }
+
+  /**
+   * Очистить устаревший кэш селекторов (старше 30 секунд)
+   */
+  private cleanupSelectorCache(): void {
+    const now = Date.now();
+    const maxAge = 30000; // 30 секунд
+
+    this.selectorCache.forEach((cache, element) => {
+      if (now - cache.timestamp > maxAge) {
+        this.selectorCache.delete(element);
+      }
+    });
   }
 }
