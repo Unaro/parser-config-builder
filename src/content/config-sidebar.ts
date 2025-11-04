@@ -11,6 +11,16 @@ import type {
 import type { SelectorConfig } from '@/types/selector';
 import type { SchemaField } from '@/types/schema';
 import { saveAs } from 'file-saver';
+import {
+  getPageTypeLabel,
+  getExtractionTypeLabel,
+  getDefaultSelectorConfig,
+  getDefaultSchemaField,
+  formatTime,
+  truncateSelector,
+  isValidSelector,
+  generateUniqueFieldName
+} from './config-sidebar-helpers';
 
 export class ConfigSidebar {
   private isVisible = false;
@@ -18,6 +28,7 @@ export class ConfigSidebar {
   private currentConfig: ParserConfig | null = null;
   private currentSection: 'main' | 'schema' | 'selector' = 'main';
   private selectedField: string | null = null;
+  private selectionHistory: ElementSelectedMessage[] = [];
   private onMessage: (message: any) => void;
 
   constructor(onMessage: (message: any) => void) {
@@ -110,7 +121,6 @@ export class ConfigSidebar {
       successCount === totalCount ? 'success' : 'warning'
     );
     
-    // Обновляем отображение результатов
     this.updateTestResults(results);
   }
 
@@ -133,7 +143,6 @@ export class ConfigSidebar {
     this.sidebarElement.id = 'pcb-sidebar';
     this.sidebarElement.className = 'pcb-sidebar pcb-ui';
     
-    // Стили для сайдбара
     this.sidebarElement.style.cssText = `
       position: fixed;
       top: 0;
@@ -165,525 +174,245 @@ export class ConfigSidebar {
   }
 
   /**
-   * Отрисовка сайдбара
+   * Привязать обработчики событий
    */
-  private renderSidebar(): string {
-    const config = this.currentConfig!;
+  private bindEventListeners(): void {
+    if (!this.sidebarElement) return;
+
+    // Кнопка закрытия
+    const closeBtn = this.sidebarElement.querySelector('#pcb-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hide());
+    }
+
+    // Панель управления
+    this.bindControlPanelEvents();
     
-    return `
-      ${this.renderHeader()}
-      ${this.renderControlPanel()}
-      ${this.renderMainContent()}
-      ${this.renderFooter()}
-    `;
-  }
-
-  /**
-   * Отрисовка заголовка
-   */
-  private renderHeader(): string {
-    return `
-      <div class="pcb-sidebar-header" style="
-        padding: 16px;
-        background: #1890ff;
-        color: white;
-        font-weight: 600;
-        font-size: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      ">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span>🔧</span>
-          Parser Builder
-        </div>
-        <button id="pcb-close-btn" style="
-          background: rgba(255,255,255,0.2);
-          border: none;
-          color: white;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          cursor: pointer;
-          font-size: 14px;
-        ">×</button>
-      </div>
-    `;
-  }
-
-  /**
-   * Отрисовка панели управления
-   */
-  private renderControlPanel(): string {
-    const pageTypes: PageType[] = ['work_detail', 'work_list', 'chapter_list', 'chapter_read', 'team_profile', 'user_profile'];
-    const pageTypeOptions = pageTypes.map(type => 
-      `<option value="${type}" ${this.currentConfig!.pageType === type ? 'selected' : ''}>${this.getPageTypeLabel(type)}</option>`
-    ).join('');
-
-    return `
-      <div class="pcb-control-panel" style="
-        padding: 16px;
-        background: #f8f9fa;
-        border-bottom: 1px solid #e9ecef;
-      ">
-        <div style="margin-bottom: 12px;">
-          <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">
-            Тип страницы:
-          </label>
-          <select id="pcb-page-type" style="
-            width: 100%;
-            padding: 6px 8px;
-            border: 1px solid #d9d9d9;
-            border-radius: 4px;
-            font-size: 13px;
-          ">
-            ${pageTypeOptions}
-          </select>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-          <button id="pcb-start-selection" class="pcb-btn-primary" style="
-            padding: 8px 12px;
-            background: #52c41a;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-          ">🎯 Выбрать поле</button>
-          
-          <button id="pcb-stop-selection" class="pcb-btn-secondary" style="
-            padding: 8px 12px;
-            background: #ff4d4f;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-          ">⏹️ Остановить</button>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <button id="pcb-test-config" class="pcb-btn-outline" style="
-            padding: 8px 12px;
-            background: white;
-            color: #1890ff;
-            border: 1px solid #1890ff;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-          ">🧪 Тест</button>
-          
-          <button id="pcb-export-config" class="pcb-btn-outline" style="
-            padding: 8px 12px;
-            background: white;
-            color: #1890ff;
-            border: 1px solid #1890ff;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-          ">📥 Экспорт</button>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Отрисовка основного содержимого
-   */
-  private renderMainContent(): string {
+    // Вкладки
+    this.bindTabEvents();
+    
+    // Секция-специфичные события
     switch (this.currentSection) {
       case 'schema':
-        return this.renderSchemaEditor();
+        this.bindSchemaEvents();
+        break;
       case 'selector':
-        return this.renderSelectorEditor();
+        this.bindSelectorEvents();
+        break;
       default:
-        return this.renderMainSection();
+        this.bindMainSectionEvents();
+        break;
     }
   }
 
   /**
-   * Отрисовка основной секции
+   * Обработчики панели управления
    */
-  private renderMainSection(): string {
-    const config = this.currentConfig!;
-    
-    return `
-      <div class="pcb-content" style="flex: 1; padding: 16px;">
-        <div class="pcb-section-tabs" style="
-          display: flex;
-          border-bottom: 1px solid #e9ecef;
-          margin-bottom: 16px;
-        ">
-          <button class="pcb-tab active" data-section="main" style="
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid #1890ff;
-            color: #1890ff;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-          ">ℹ️ Обзор</button>
-          
-          <button class="pcb-tab" data-section="schema" style="
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid transparent;
-            color: #666;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-          ">📄 Схема (${config.schema.fields.length})</button>
-        </div>
-        
-        ${this.renderConfigInfo()}
-        ${this.renderSelectionHistory()}
-      </div>
-    `;
+  private bindControlPanelEvents(): void {
+    // Изменение типа страницы
+    const pageTypeSelect = this.sidebarElement!.querySelector('#pcb-page-type') as HTMLSelectElement;
+    if (pageTypeSelect) {
+      pageTypeSelect.addEventListener('change', (e) => {
+        const pageType = (e.target as HTMLSelectElement).value as PageType;
+        this.onMessage({
+          type: 'UPDATE_PAGE_TYPE',
+          pageType,
+          id: `sidebar_${Date.now()}`,
+          timestamp: Date.now()
+        });
+      });
+    }
+
+    // Начать выбор
+    const startBtn = this.sidebarElement!.querySelector('#pcb-start-selection');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        this.showFieldSelectionPrompt();
+      });
+    }
+
+    // Остановить выбор
+    const stopBtn = this.sidebarElement!.querySelector('#pcb-stop-selection');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        this.onMessage({
+          type: 'STOP_SELECTION',
+          id: `sidebar_${Date.now()}`,
+          timestamp: Date.now()
+        });
+      });
+    }
+
+    // Тестировать конфиг
+    const testBtn = this.sidebarElement!.querySelector('#pcb-test-config');
+    if (testBtn) {
+      testBtn.addEventListener('click', () => {
+        if (this.currentConfig) {
+          this.onMessage({
+            type: 'TEST_CONFIG',
+            config: this.currentConfig,
+            id: `sidebar_${Date.now()}`,
+            timestamp: Date.now()
+          });
+        }
+      });
+    }
+
+    // Экспорт конфига
+    const exportBtn = this.sidebarElement!.querySelector('#pcb-export-config');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        this.exportConfig();
+      });
+    }
   }
 
   /**
-   * Отрисовка информации о конфиге
+   * Обработчики вкладок
    */
-  private renderConfigInfo(): string {
-    const config = this.currentConfig!;
-    
-    return `
-      <div class="pcb-config-info" style="
-        padding: 12px;
-        background: #f0f8ff;
-        border: 1px solid #1890ff;
-        border-radius: 6px;
-        font-size: 13px;
-        margin-bottom: 16px;
-      ">
-        <div><strong>Платформа:</strong> ${config.platform.name}</div>
-        <div><strong>Домен:</strong> ${config.platform.domain}</div>
-        <div><strong>Тип:</strong> ${this.getPageTypeLabel(config.pageType)}</div>
-        <div><strong>Полей:</strong> ${config.schema.fields.length}</div>
-        <div><strong>Селекторов:</strong> ${Object.keys(config.selectors).length}</div>
-      </div>
-    `;
+  private bindTabEvents(): void {
+    const tabs = this.sidebarElement!.querySelectorAll('.pcb-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const section = (e.target as HTMLElement).getAttribute('data-section') as any;
+        if (section !== this.currentSection) {
+          this.currentSection = section;
+          this.selectedField = null;
+          this.updateSidebarContent();
+        }
+      });
+    });
   }
 
   /**
-   * Отрисовка истории выбора
+   * Обработчики основной секции
    */
-  private renderSelectionHistory(): string {
-    return `
-      <div class="pcb-selection-history">
-        <div style="
-          font-weight: 600;
-          font-size: 14px;
-          color: #666;
-          margin-bottom: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        ">
-          История выбора:
-          <button id="pcb-clear-history" style="
-            font-size: 11px;
-            color: #999;
-            background: none;
-            border: none;
-            cursor: pointer;
-          ">✖ Очистить</button>
-        </div>
-        
-        <div class="pcb-history-list" id="pcb-history-list" style="
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          max-height: 300px;
-          overflow-y: auto;
-        "></div>
-      </div>
-    `;
+  private bindMainSectionEvents(): void {
+    // Очистить историю
+    const clearBtn = this.sidebarElement!.querySelector('#pcb-clear-history');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.selectionHistory = [];
+        this.updateHistoryDisplay();
+      });
+    }
+
+    // Клики по элементам истории
+    const historyItems = this.sidebarElement!.querySelectorAll('.pcb-history-item');
+    historyItems.forEach(item => {
+      item.addEventListener('click', (e) => {
+        const fieldName = (e.currentTarget as HTMLElement).getAttribute('data-field-name');
+        if (fieldName) {
+          this.openSelectorEditor(fieldName);
+        }
+      });
+    });
   }
 
   /**
-   * Отрисовка редактора схемы
+   * Обработчики редактора схемы
    */
-  private renderSchemaEditor(): string {
-    const config = this.currentConfig!;
-    const fields = config.schema.fields;
-    
-    const fieldsHtml = fields.map(field => `
-      <div class="pcb-schema-field" style="
-        padding: 8px 12px;
-        background: #f9f9f9;
-        border-radius: 4px;
-        margin-bottom: 8px;
-        border-left: 3px solid ${field.required ? '#52c41a' : '#d9d9d9'};
-      ">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div>
-            <div style="font-weight: 600; font-size: 13px;">
-              ${field.name} ${field.required ? '<span style="color: #ff4d4f;">*</span>' : ''}
-            </div>
-            <div style="font-size: 11px; color: #666;">${field.type}</div>
-          </div>
-          <div style="display: flex; gap: 4px;">
-            <button class="pcb-edit-field" data-field="${field.name}" style="
-              background: #1890ff;
-              color: white;
-              border: none;
-              border-radius: 3px;
-              padding: 4px 8px;
-              cursor: pointer;
-              font-size: 10px;
-            ">✏️ Изм.</button>
-            
-            <button class="pcb-bind-selector" data-field="${field.name}" style="
-              background: #52c41a;
-              color: white;
-              border: none;
-              border-radius: 3px;
-              padding: 4px 8px;
-              cursor: pointer;
-              font-size: 10px;
-            ">🔗 Связать</button>
-            
-            <button class="pcb-delete-field" data-field="${field.name}" style="
-              background: #ff4d4f;
-              color: white;
-              border: none;
-              border-radius: 3px;
-              padding: 4px 8px;
-              cursor: pointer;
-              font-size: 10px;
-            ">✖</button>
-          </div>
-        </div>
-      </div>
-    `).join('');
-    
-    return `
-      <div class="pcb-content" style="flex: 1; padding: 16px;">
-        <div class="pcb-section-tabs" style="
-          display: flex;
-          border-bottom: 1px solid #e9ecef;
-          margin-bottom: 16px;
-        ">
-          <button class="pcb-tab" data-section="main" style="
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid transparent;
-            color: #666;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-          ">ℹ️ Обзор</button>
-          
-          <button class="pcb-tab active" data-section="schema" style="
-            padding: 8px 16px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid #1890ff;
-            color: #1890ff;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-          ">📄 Схема (${config.schema.fields.length})</button>
-        </div>
-        
-        <div style="margin-bottom: 16px;">
-          <button id="pcb-add-field" style="
-            width: 100%;
-            padding: 10px;
-            background: #52c41a;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-          ">➕ Добавить поле</button>
-        </div>
-        
-        <div class="pcb-schema-fields">
-          ${fieldsHtml}
-        </div>
-      </div>
-    `;
+  private bindSchemaEvents(): void {
+    // Добавить поле
+    const addBtn = this.sidebarElement!.querySelector('#pcb-add-field');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => {
+        this.showAddFieldDialog();
+      });
+    }
+
+    // Редактировать поле
+    const editBtns = this.sidebarElement!.querySelectorAll('.pcb-edit-field');
+    editBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const fieldName = (e.target as HTMLElement).getAttribute('data-field')!;
+        this.showEditFieldDialog(fieldName);
+      });
+    });
+
+    // Привязать селектор
+    const bindBtns = this.sidebarElement!.querySelectorAll('.pcb-bind-selector');
+    bindBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const fieldName = (e.target as HTMLElement).getAttribute('data-field')!;
+        this.startFieldSelection(fieldName);
+      });
+    });
+
+    // Удалить поле
+    const deleteBtns = this.sidebarElement!.querySelectorAll('.pcb-delete-field');
+    deleteBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const fieldName = (e.target as HTMLElement).getAttribute('data-field')!;
+        this.deleteField(fieldName);
+      });
+    });
   }
 
   /**
-   * Отрисовка редактора селектора
+   * Обработчики редактора селектора
    */
-  private renderSelectorEditor(): string {
-    const config = this.currentConfig!;
-    const fieldName = this.selectedField!;
-    const field = config.schema.fields.find(f => f.name === fieldName);
-    const selector = config.selectors[fieldName] || this.getDefaultSelectorConfig();
-    
-    const extractionTypes = ['text', 'attribute', 'html', 'array', 'count', 'exists'];
-    const typeOptions = extractionTypes.map(type => 
-      `<option value="${type}" ${selector.type === type ? 'selected' : ''}>${this.getExtractionTypeLabel(type)}</option>`
-    ).join('');
-    
-    const fallbackItems = selector.fallback.map((fb, index) => `
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-        <input type="text" value="${fb}" data-fallback-index="${index}" style="
-          flex: 1;
-          padding: 4px 8px;
-          border: 1px solid #d9d9d9;
-          border-radius: 3px;
-          font-size: 12px;
-          font-family: monospace;
-        ">
-        <button class="pcb-remove-fallback" data-index="${index}" style="
-          background: #ff4d4f;
-          color: white;
-          border: none;
-          border-radius: 3px;
-          padding: 4px 6px;
-          cursor: pointer;
-          font-size: 10px;
-        ">✖</button>
-      </div>
-    `).join('');
-    
-    return `
-      <div class="pcb-content" style="flex: 1; padding: 16px;">
-        <div style="margin-bottom: 16px;">
-          <button id="pcb-back-to-main" style="
-            background: none;
-            border: none;
-            color: #1890ff;
-            cursor: pointer;
-            font-size: 13px;
-          ">← Обратно</button>
-        </div>
-        
-        <div class="pcb-selector-editor">
-          <h3 style="margin: 0 0 16px 0; font-size: 16px;">✏️ Редактор селектора</h3>
-          
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">
-              Поле: ${fieldName} (${field?.type || 'unknown'})
-            </label>
-          </div>
-          
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">
-              Основной селектор:
-            </label>
-            <input type="text" id="pcb-primary-selector" value="${selector.primary}" style="
-              width: 100%;
-              padding: 8px;
-              border: 1px solid #d9d9d9;
-              border-radius: 4px;
-              font-size: 13px;
-              font-family: monospace;
-            ">
-          </div>
-          
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">
-              Тип извлечения:
-            </label>
-            <select id="pcb-extraction-type" style="
-              width: 100%;
-              padding: 8px;
-              border: 1px solid #d9d9d9;
-              border-radius: 4px;
-              font-size: 13px;
-            ">
-              ${typeOptions}
-            </select>
-          </div>
-          
-          ${selector.type === 'attribute' ? `
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">
-              Название атрибута:
-            </label>
-            <input type="text" id="pcb-attribute-name" value="${selector.attribute || ''}" 
-              placeholder="например: href, data-id, value" style="
-              width: 100%;
-              padding: 8px;
-              border: 1px solid #d9d9d9;
-              border-radius: 4px;
-              font-size: 13px;
-            ">
-          </div>
-          ` : ''}
-          
-          <div style="margin-bottom: 12px;">
-            <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 4px;">
-              Fallback селекторы:
-            </label>
-            <div id="pcb-fallback-list">
-              ${fallbackItems}
-            </div>
-            <button id="pcb-add-fallback" style="
-              width: 100%;
-              padding: 6px;
-              background: #f0f0f0;
-              border: 1px dashed #d9d9d9;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 12px;
-              color: #666;
-            ">➕ Добавить fallback</button>
-          </div>
-          
-          <div style="display: flex; gap: 8px; margin-top: 20px;">
-            <button id="pcb-preview-selector" style="
-              flex: 1;
-              padding: 10px;
-              background: #faad14;
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 13px;
-              font-weight: 600;
-            ">🔍 Предпросмотр</button>
-            
-            <button id="pcb-save-selector" style="
-              flex: 1;
-              padding: 10px;
-              background: #52c41a;
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 13px;
-              font-weight: 600;
-            ">✅ Сохранить</button>
-          </div>
-        </div>
-      </div>
-    `;
+  private bindSelectorEvents(): void {
+    // Назад
+    const backBtn = this.sidebarElement!.querySelector('#pcb-back-to-main');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.currentSection = 'main';
+        this.selectedField = null;
+        this.updateSidebarContent();
+      });
+    }
+
+    // Изменение типа извлечения
+    const typeSelect = this.sidebarElement!.querySelector('#pcb-extraction-type') as HTMLSelectElement;
+    if (typeSelect) {
+      typeSelect.addEventListener('change', () => {
+        // Показываем/скрываем поле атрибута
+        this.updateSidebarContent();
+      });
+    }
+
+    // Добавить fallback
+    const addFallbackBtn = this.sidebarElement!.querySelector('#pcb-add-fallback');
+    if (addFallbackBtn) {
+      addFallbackBtn.addEventListener('click', () => {
+        this.addFallbackSelector();
+      });
+    }
+
+    // Удалить fallback
+    const removeBtns = this.sidebarElement!.querySelectorAll('.pcb-remove-fallback');
+    removeBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt((e.target as HTMLElement).getAttribute('data-index')!);
+        this.removeFallbackSelector(index);
+      });
+    });
+
+    // Предпросмотр
+    const previewBtn = this.sidebarElement!.querySelector('#pcb-preview-selector');
+    if (previewBtn) {
+      previewBtn.addEventListener('click', () => {
+        this.previewSelector();
+      });
+    }
+
+    // Сохранить
+    const saveBtn = this.sidebarElement!.querySelector('#pcb-save-selector');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        this.saveSelector();
+      });
+    }
   }
 
-  /**
-   * Отрисовка подвала
-   */
-  private renderFooter(): string {
-    return `
-      <div class="pcb-sidebar-footer" style="
-        padding: 16px;
-        border-top: 1px solid #f0f0f0;
-        background: #fafafa;
-        font-size: 11px;
-        color: #999;
-        text-align: center;
-      ">
-        Parser Config Builder v1.0.0
-      </div>
-    `;
-  }
-
-  // ... остальные методы будут добавлены в следующем коммите
+  // ... Остальные методы будут в следующих файлах для сокращения размера
+  
+  private getPageTypeLabel = getPageTypeLabel;
+  private getExtractionTypeLabel = getExtractionTypeLabel;
+  private getDefaultSelectorConfig = getDefaultSelectorConfig;
+  private formatTime = formatTime;
+  private truncateSelector = truncateSelector;
+  private isValidSelector = isValidSelector;
+  private generateUniqueFieldName = generateUniqueFieldName;
 }
