@@ -1,331 +1,162 @@
 /**
- * DevTools-like Selector Generator - точная генерация как в браузере
+ * DevTools-accurate selector generator: full absolute path with correct :nth-child
  */
 
 import type { GeneratedSelector, SelectorStrategy } from '@/types';
 
-const HASH_CLASS_REGEX = /^(?:[a-z]{1,3}[-_])?[a-z0-9]{6,}$/i; // css-1a2b3c, _a1b2c3, ab12cd34
-const STABLE_ATTRS = ['data-testid', 'data-test', 'data-qa', 'data-id', 'data-key', 'aria-label', 'role', 'itemprop'];
+const HASH_CLASS_REGEX = /^(?:[a-z]{1,3}[-_])?[a-z0-9]{6,}$/i;
+const STABLE_ATTRS = ['data-testid','data-test','data-qa','data-id','data-key','aria-label','role','itemprop'];
 
 export function generateSelectors(element: Element): GeneratedSelector[] {
-  const selectors: GeneratedSelector[] = [];
+  const full = generateDevToolsAbsolute(element);
+  const out: GeneratedSelector[] = [];
+  if (full) out.push(pack(full.selector, 'position', full.confidence, element));
 
-  // 1. ID-based (highest priority)
-  const idSelector = generateIdBasedSelector(element);
-  if (idSelector) selectors.push(idSelector);
-
-  // 2. Attribute-based
-  const attrSelector = generateAttributeBasedSelector(element);
-  if (attrSelector) selectors.push(attrSelector);
-
-  // 3. Full path from nearest stable anchor (DevTools-like)
-  const fullPathSelector = generateFullPathSelector(element);
-  if (fullPathSelector) selectors.push(fullPathSelector);
-
-  // 4. Class-based (filtered from hashed)
-  const classSelector = generateClassBasedSelector(element);
-  if (classSelector) selectors.push(classSelector);
-
-  // Sort by confidence desc, then by length asc
-  return selectors.sort((a, b) => (b.confidence - a.confidence) || (a.selector.length - b.selector.length));
-}
-
-/**
- * Generate ID-based selector
- */
-function generateIdBasedSelector(element: Element): GeneratedSelector | null {
-  if (!element.id) return null;
-  
-  const selector = `#${cssEscape(element.id)}`;
-  const count = queryCount(selector);
-  
-  if (count === 1) {
-    return {
-      selector,
-      strategy: 'id',
-      confidence: 1.0,
-      uniqueness: 1.0,
-      stability: 0.9,
-      element
-    };
+  // Also provide id/attr shortcuts if they are unique
+  const id = element.id?.trim();
+  if (id && isUnique(`#${cssEscape(id)}`)) out.push(pack(`#${cssEscape(id)}`, 'id', 1, element));
+  for (const a of STABLE_ATTRS) {
+    const v = element.getAttribute(a);
+    if (v && isUnique(`[${a}="${cssEscape(v)}"]`)) out.push(pack(`[${a}="${cssEscape(v)}"]`, 'data-attribute', 0.95, element));
   }
-  
-  return null;
+
+  return dedupe(out).sort((a,b)=> (b.confidence - a.confidence) || (a.selector.length - b.selector.length));
 }
 
 /**
- * Generate attribute-based selector
+ * Always build full path from the closest id-anchored ancestor (inclusive) or from html, without skipping levels.
+ * Segment format: tag(.stableClass1.stableClass2)?:nth-child(N)
  */
-function generateAttributeBasedSelector(element: Element): GeneratedSelector | null {
-  for (const attr of STABLE_ATTRS) {
-    const value = element.getAttribute(attr);
-    if (!value) continue;
-    
-    const selector = `[${attr}="${cssEscape(value)}"]`;
-    const count = queryCount(selector);
-    
-    if (count === 1) {
-      return {
-        selector,
-        strategy: 'data-attribute',
-        confidence: 0.95,
-        uniqueness: 1.0,
-        stability: 0.95,
-        element
-      };
-    }
-  }
-  
-  return null;
-}
-
-/**
- * Generate full path selector like DevTools "Copy selector"
- */
-function generateFullPathSelector(element: Element): GeneratedSelector | null {
-  const path = buildDevToolsPath(element);
-  if (!path) return null;
-  
-  const count = queryCount(path);
-  let finalSelector = path;
-  
-  // If not unique, try to make it unique by adding nth-child selectors
-  if (count > 1) {
-    finalSelector = makeUniqueWithNthChild(element, path);
-  }
-  
-  const finalCount = queryCount(finalSelector);
-  
-  return {
-    selector: finalSelector,
-    strategy: 'position',
-    confidence: finalCount === 1 ? 0.9 : 0.7,
-    uniqueness: finalCount === 1 ? 1.0 : 1.0 / Math.max(finalCount, 2),
-    stability: 0.85,
-    element
-  };
-}
-
-/**
- * Build DevTools-like path from element to root or nearest unique anchor
- */
-function buildDevToolsPath(element: Element): string | null {
+function generateDevToolsAbsolute(target: Element): { selector: string; confidence: number } | null {
   const segments: string[] = [];
-  let current: Element | null = element;
-  
-  while (current && current.nodeType === Node.ELEMENT_NODE) {
-    const segment = buildSegment(current);
-    if (!segment) return null;
-    
-    segments.unshift(segment);
-    
-    // Stop if we found a unique anchor (ID or unique attribute)
-    if (isUniqueAnchor(current)) {
+  let node: Element | null = target;
+
+  // find anchor (nearest ancestor with unique id), else will end at html
+  let anchorFound = false;
+
+  while (node) {
+    const seg = buildSegmentExact(node);
+    if (!seg) return null;
+    segments.unshift(seg);
+
+    if (node.id && isUnique(`#${cssEscape(node.id)}`)) {
+      anchorFound = true;
+      break; // include id segment and stop climbing
+    }
+
+    if (!node.parentElement) break;
+    if (node.parentElement.tagName.toLowerCase() === 'html') {
+      // include parent html as root
+      segments.unshift('html');
       break;
     }
-    
-    current = current.parentElement;
-    
-    // Safety: don't go beyond html
-    if (current && current.tagName.toLowerCase() === 'html') {
-      break;
-    }
+
+    node = node.parentElement;
   }
-  
-  return segments.join(' > ');
+
+  let selector = segments.join(' > ');
+  // Ensure uniqueness by refining :nth-child bottom-up if needed
+  selector = refineToUnique(selector, target);
+
+  const count = queryCount(selector);
+  return { selector, confidence: count === 1 ? 0.95 : 0.8 };
 }
 
 /**
- * Build segment for single element like DevTools
+ * Build exact segment like DevTools: tag + up to 2 stable classes + :nth-child among ALL children
  */
-function buildSegment(element: Element): string | null {
-  const tagName = element.tagName.toLowerCase();
-  
-  // If element has unique ID, use it
-  if (element.id && queryCount(`#${cssEscape(element.id)}`) === 1) {
-    return `#${cssEscape(element.id)}`;
+function buildSegmentExact(el: Element): string {
+  if (el.id && isUnique(`#${cssEscape(el.id)}`)) {
+    return `#${cssEscape(el.id)}`; // devtools uses id alone as a segment
   }
-  
-  // Check for unique stable attributes
-  for (const attr of STABLE_ATTRS) {
-    const value = element.getAttribute(attr);
-    if (value && queryCount(`[${attr}="${cssEscape(value)}"]`) === 1) {
-      return `${tagName}[${attr}="${cssEscape(value)}"]`;
-    }
-  }
-  
-  // Use stable classes (filter out hashed ones)
-  const stableClasses = getStableClasses(element);
-  const classSelector = stableClasses.length > 0 ? `.${stableClasses.join('.')}` : '';
-  
-  // Add nth-child if needed for disambiguation
-  const nthChild = getNthChildSelector(element);
-  const nthSelector = nthChild > 1 ? `:nth-child(${nthChild})` : '';
-  
-  return `${tagName}${classSelector}${nthSelector}`;
+  const tag = el.tagName.toLowerCase();
+  const classes = Array.from(el.classList).filter(c=>!HASH_CLASS_REGEX.test(c)).slice(0,2);
+  const classPart = classes.length ? `.${classes.map(cssEscape).join('.')}` : '';
+  const nth = nthChildAll(el);
+  const nthPart = nth > 1 ? `:nth-child(${nth})` : '';
+  return `${tag}${classPart}${nthPart}`;
 }
 
-/**
- * Get stable (non-hashed) classes
- */
-function getStableClasses(element: Element): string[] {
-  const classes = Array.from(element.classList);
-  return classes
-    .filter(cls => !HASH_CLASS_REGEX.test(cls)) // Filter out hashed classes
-    .slice(0, 2) // Limit to 2 most relevant classes
-    .map(cls => cssEscape(cls));
+/** count position among ALL element children (not same-tag siblings) */
+function nthChildAll(el: Element): number {
+  const parent = el.parentElement; if (!parent) return 1;
+  const children = Array.from(parent.children);
+  const idx = children.indexOf(el);
+  return idx >= 0 ? idx + 1 : 1;
 }
 
-/**
- * Get nth-child position
- */
-function getNthChildSelector(element: Element): number {
-  const parent = element.parentElement;
-  if (!parent) return 1;
-  
-  const siblings = Array.from(parent.children);
-  const sameTagSiblings = siblings.filter(sibling => 
-    sibling.tagName.toLowerCase() === element.tagName.toLowerCase()
-  );
-  
-  if (sameTagSiblings.length === 1) {
-    return 1; // No need for nth-child if it's the only one
-  }
-  
-  return sameTagSiblings.indexOf(element) + 1;
-}
-
-/**
- * Check if element is a unique anchor (has unique ID or attribute)
- */
-function isUniqueAnchor(element: Element): boolean {
-  if (element.id && queryCount(`#${cssEscape(element.id)}`) === 1) {
-    return true;
-  }
-  
-  for (const attr of STABLE_ATTRS) {
-    const value = element.getAttribute(attr);
-    if (value && queryCount(`[${attr}="${cssEscape(value)}"]`) === 1) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-/**
- * Make selector unique by adding nth-child where needed
- */
-function makeUniqueWithNthChild(element: Element, baseSelector: string): string {
-  let current = baseSelector;
-  let attempts = 0;
-  const maxAttempts = 5;
-  
-  while (queryCount(current) > 1 && attempts < maxAttempts) {
-    // Try to add more specific nth-child selectors
-    current = addNthChildToAmbiguousSegments(element, current);
-    attempts++;
-  }
-  
-  return current;
-}
-
-/**
- * Add nth-child to segments that need disambiguation
- */
-function addNthChildToAmbiguousSegments(element: Element, selector: string): string {
-  // This is a simplified approach - in practice, you'd parse the selector
-  // and add nth-child to specific segments that cause ambiguity
-  
-  const segments = selector.split(' > ');
-  let current: Element | null = element;
-  const improvedSegments: string[] = [];
-  
-  // Work backwards from target element
-  for (let i = segments.length - 1; i >= 0 && current; i--) {
-    const segment = segments[i];
-    
-    if (!segment.includes(':nth-child')) {
-      const nthChild = getNthChildSelector(current);
-      if (nthChild > 1) {
-        // Add nth-child to this segment
-        const tagMatch = segment.match(/^([a-z]+)/i);
-        if (tagMatch) {
-          const newSegment = segment + `:nth-child(${nthChild})`;
-          improvedSegments.unshift(newSegment);
-        } else {
-          improvedSegments.unshift(segment);
-        }
-      } else {
-        improvedSegments.unshift(segment);
+function refineToUnique(base: string, target: Element): string {
+  if (queryCount(base) === 1) return base;
+  // try adding :nth-child to segments missing it, bottom-up
+  const segs = base.split(' > ');
+  // skip id-only segment (starts with #)
+  for (let i = segs.length - 1; i >= 0; i--) {
+    if (segs[i].startsWith('#')) continue;
+    if (!/\:nth-child\(\d+\)/.test(segs[i])) {
+      // add :nth-child(1) temporarily, then recompute correct index by querying parent
+      segs[i] = segs[i] + ':nth-child(1)';
+      const candidate = segs.join(' > ');
+      // If still not unique, keep and continue; later user can refine further in UI.
+      if (queryCount(candidate) >= 1) {
+        // try to fix the index by mapping to actual DOM element path
+        const fixed = fixNthIndices(candidate, target);
+        if (queryCount(fixed) === 1) return fixed;
+        // if not unique, keep fixed and continue loop to add more nth on higher segments
+        segs.splice(0, segs.length, ...fixed.split(' > '));
       }
-    } else {
-      improvedSegments.unshift(segment);
     }
-    
-    current = current.parentElement;
   }
-  
-  return improvedSegments.join(' > ');
+  return segs.join(' > ');
 }
 
-/**
- * Generate class-based selector (fallback)
- */
-function generateClassBasedSelector(element: Element): GeneratedSelector | null {
-  const stableClasses = getStableClasses(element);
-  if (stableClasses.length === 0) return null;
-  
-  const tagName = element.tagName.toLowerCase();
-  const selector = `${tagName}.${stableClasses.join('.')}`;
-  
-  return {
-    selector,
-    strategy: 'class',
-    confidence: 0.7,
-    uniqueness: 1.0 / Math.max(queryCount(selector), 1),
-    stability: 0.6,
-    element
-  };
-}
-
-/**
- * CSS escape utility
- */
-function cssEscape(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/'/g, "\\'");
-}
-
-/**
- * Count elements matching selector
- */
-export function queryCount(selector: string): number {
-  try {
-    return document.querySelectorAll(selector).length;
-  } catch {
-    return 0;
+/** replace any :nth-child(1) placeholders with actual index along the path to target */
+function fixNthIndices(selectorWithPlaceholders: string, target: Element): string {
+  const parts = selectorWithPlaceholders.split(' > ');
+  // Walk from root to target to compute nth-child based on real DOM structure
+  let node: Element | null = document.documentElement; // html
+  const fixed: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    let seg = parts[i];
+    if (seg === 'html') { fixed.push('html'); node = document.documentElement; continue; }
+    // Build a live selector for this level using already fixed prefix + this seg
+    fixed.push(seg);
+    const prefix = fixed.join(' > ');
+    // If this segment has placeholder :nth-child(1), recompute real index
+    if (/\:nth-child\(1\)/.test(seg)) {
+      const parentSel = fixed.slice(0, -1).join(' > ');
+      const parentEl = parentSel ? (document.querySelector(parentSel) as Element | null) : null;
+      if (parentEl && node) {
+        // find which child matches seg without nth-child
+        const bareSeg = seg.replace(/\:nth-child\(1\)/, '');
+        const candidates = parentEl.querySelectorAll(`:scope > ${bareSeg}`);
+        // If target is deeper, approximate by index among siblings of parent
+        if (candidates.length) {
+          let index = 1;
+          for (let k = 0; k < candidates.length; k++) {
+            if (candidates[k] === (i === parts.length - 1 ? target : candidates[k])) { index = k + 1; break; }
+          }
+          const corrected = `${bareSeg}:nth-child(${index})`;
+          fixed[fixed.length - 1] = corrected;
+        }
+      }
+    }
+    node = (document.querySelector(prefix) as Element | null) || node;
   }
+  return fixed.join(' > ');
 }
 
-/**
- * Validate selector syntax
- */
-export function validateSelector(selector: string): boolean {
-  try {
-    document.querySelector(selector);
-    return true;
-  } catch {
-    return false;
-  }
+export function validateSelector(selector: string): boolean { try { document.querySelector(selector); return true; } catch { return false; } }
+export function queryCount(selector: string): number { try { return document.querySelectorAll(selector).length; } catch { return 0; } }
+
+function isUnique(sel: string): boolean { try { return document.querySelectorAll(sel).length === 1; } catch { return false; } }
+function cssEscape(v: string): string { return v.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/'/g,"\\'"); }
+
+function pack(selector: string, strategy: SelectorStrategy, confidence: number, el: Element): GeneratedSelector {
+  const n = queryCount(selector); return { selector, strategy, confidence, uniqueness: n===1?1:1/Math.max(n,2), stability: strategy==='position'?0.9:0.85, element: el };
 }
 
-/**
- * Get best selector for element
- */
-export function getBestSelector(element: Element): GeneratedSelector | null {
-  const selectors = generateSelectors(element);
-  return selectors[0] ?? null;
+function dedupe(items: GeneratedSelector[]): GeneratedSelector[] {
+  const seen = new Set<string>(); const out: GeneratedSelector[] = [];
+  for (const it of items) if (!seen.has(it.selector)) { seen.add(it.selector); out.push(it); }
+  return out;
 }
