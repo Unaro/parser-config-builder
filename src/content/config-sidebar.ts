@@ -317,7 +317,7 @@ export class ConfigSidebar {
     // Ограничиваем историю 10 записями
     const items = historyList.children;
     if (items.length > 10) {
-      items[0].remove();
+      items[0]?.remove();
     }
   }
 }
