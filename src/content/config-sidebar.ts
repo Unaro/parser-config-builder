@@ -1,5 +1,5 @@
 /**
- * Config Sidebar - боковая панель управления конфигурацией (с Schema Editor)
+ * Config Sidebar - боковая панель управления конфигурацией (с полноценным Selector Editor)
  */
 
 import type { 
@@ -63,8 +63,11 @@ export class ConfigSidebar {
       'success'
     );
     this.addToSelectionHistory(message);
+    
+    // Если это поле, которое мы сейчас настраиваем - автоматически заполняем форму
     if (this.selectedField === message.fieldName) {
       this.openSelectorEditor(message.fieldName, message.selector);
+      this.autoFillSelectorForm(message.selector);
     }
   }
 
@@ -691,7 +694,7 @@ export class ConfigSidebar {
     `;
   }
   
-  // === Selector Editor (placeholder) ===
+  // === Selector Editor (полная реализация) ===
   
   private renderSelectorEditor(): string {
     const fieldName = this.selectedField!;
@@ -701,6 +704,20 @@ export class ConfigSidebar {
     if (!field) {
       return '<div style="padding: 20px; color: #ff4d4f;">Поле не найдено</div>';
     }
+    
+    const existing = config.selectors[fieldName] as SelectorConfig | undefined;
+    const typeOptions = ['text', 'attribute', 'html', 'array', 'count', 'exists']
+      .map(t => `<option value="${t}" ${existing?.type === t ? 'selected' : ''}>${t}</option>`)
+      .join('');
+
+    const primary = existing?.primary ?? '';
+    const attrName = existing?.type === 'attribute' ? ((existing as any).attribute ?? 'value') : 'value';
+    const fallback = ((existing as any)?.fallback ?? []).map((v: string, i: number) =>
+      `<div class="pcb-fallback-item" data-index="${i}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <input type="text" value="${v.replace(/"/g, '&quot;')}" class="pcb-fallback-input" style="flex:1;padding:8px;border:1px solid #e8e8e8;border-radius:6px;font-family:monospace;font-size:12px;" />
+        <button class="pcb-remove-fallback btn btn--danger btn--small" data-index="${i}">✖</button>
+      </div>`
+    ).join('');
     
     return `
       <div class="pcb-content" style="flex: 1; padding: 20px; background: white;">
@@ -752,11 +769,90 @@ export class ConfigSidebar {
             🎯 Селектор: ${fieldName}
           </button>
         </div>
-        
-        <div style="padding: 20px; background: #f9f9f9; border-radius: 8px; text-align: center;">
-          <div style="font-size: 48px; margin-bottom: 16px;">🔧</div>
-          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">Selector Editor</div>
-          <div style="color: #666;">[Будет добавлен в следующем коммите]</div>
+
+        <!-- Информация о поле -->
+        <div style="
+          background: #f6ffed;
+          border: 2px solid #b7eb8f;
+          border-radius: 8px;
+          padding: 16px;
+          margin-bottom: 24px;
+        ">
+          <div style="font-weight: 600; color: #52c41a; margin-bottom: 8px;">
+            Настройка селектора для поля: ${fieldName}
+          </div>
+          <div style="font-size: 13px; color: #666;">
+            Тип поля: <strong>${field.type}</strong> ${field.required ? '• <span style="color: #ff4d4f;">обязательное</span>' : ''}
+          </div>
+          ${field.description ? `<div style="font-size: 12px; color: #999; margin-top: 4px; font-style: italic;">${field.description}</div>` : ''}
+        </div>
+
+        <!-- Форма селектора -->
+        <div class="pcb-selector-form" style="display: grid; gap: 20px;">
+          <!-- Основной селектор -->
+          <div>
+            <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">🎯 Основной селектор</label>
+            <div style="display: flex; gap: 8px;">
+              <input id="pcb-primary-selector" type="text" value="${primary.replace(/"/g, '&quot;')}" placeholder="Например, .title a" style="
+                flex: 1;
+                padding: 12px;
+                border: 2px solid #e8e8e8;
+                border-radius: 8px;
+                font-family: monospace;
+                font-size: 14px;
+              " />
+              <button id="pcb-preview-selector" class="btn btn--outline" style="padding: 12px 16px;">
+                🔍 Предпросмотр
+              </button>
+            </div>
+            <div id="pcb-preview-status" style="font-size: 12px; color: #666; margin-top: 4px;"></div>
+          </div>
+
+          <!-- Настройки извлечения -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">⚙️ Тип извлечения</label>
+              <select id="pcb-extraction-type" style="
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e8e8e8;
+                border-radius: 8px;
+                font-size: 14px;
+              ">${typeOptions}</select>
+            </div>
+            <div id="pcb-attribute-wrap" style="${existing?.type === 'attribute' ? '' : 'display:none;'}">
+              <label style="display: block; font-weight: 600; color: #333; margin-bottom: 8px;">📋 Атрибут</label>
+              <input id="pcb-attribute-name" type="text" value="${attrName}" placeholder="value / href / src" style="
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e8e8e8;
+                border-radius: 8px;
+                font-size: 14px;
+              " />
+            </div>
+          </div>
+
+          <!-- Fallback селекторы -->
+          <div>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <label style="font-weight: 600; color: #333;">🔄 Fallback селекторы</label>
+              <button id="pcb-add-fallback" class="btn btn--secondary btn--small">
+                ➕ Добавить
+              </button>
+            </div>
+            <div id="pcb-fallback-list">${fallback}</div>
+            ${fallback === '' ? '<div style="text-align: center; padding: 20px; color: #999; font-size: 13px;">Fallback селекторы отсутствуют</div>' : ''}
+          </div>
+
+          <!-- Действия -->
+          <div style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid #f0f0f0;">
+            <button id="pcb-clear-selector" class="btn btn--outline">
+              ♻️ Очистить
+            </button>
+            <button id="pcb-save-selector" class="btn btn--primary">
+              💾 Сохранить селектор
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -833,6 +929,7 @@ export class ConfigSidebar {
     this.bindTabEvents();
     this.bindMainSectionEvents();
     this.bindSchemaEditorEvents();
+    this.bindSelectorEditorEvents();
   }
 
   private bindControlPanelEvents(): void {
@@ -932,13 +1029,247 @@ export class ConfigSidebar {
     });
   }
 
-  // === Методы-обертки ===
-  private showFieldSelectionPrompt() { if (!this.currentConfig) return; SidebarUIMethods.showFieldSelectionPrompt(this.currentConfig, this.onMessage); }
-  private exportConfig() { if (!this.currentConfig) return; SidebarUIMethods.exportConfig(this.currentConfig); }
-  private updateHistoryDisplay() { if (!this.sidebarElement) return; const list = this.sidebarElement.querySelector('#pcb-history-list'); if (!list) return; list.innerHTML = this.selectionHistory.map((m: ElementSelectedMessage) => SidebarUIMethods.renderHistoryItem(m)).join(''); const historyItems = this.sidebarElement!.querySelectorAll('.pcb-history-item'); historyItems.forEach((item: Element) => { item.addEventListener('click', (e: Event) => { const fieldName = (e.currentTarget as HTMLElement).getAttribute('data-field-name'); if (fieldName) this.openSelectorEditor(fieldName); }); }); }
+  private bindSelectorEditorEvents(): void {
+    if (!this.sidebarElement) return;
+    
+    const typeSelect = this.sidebarElement.querySelector('#pcb-extraction-type') as HTMLSelectElement | null;
+    const attrWrap = this.sidebarElement.querySelector('#pcb-attribute-wrap') as HTMLElement | null;
+    const previewBtn = this.sidebarElement.querySelector('#pcb-preview-selector');
+    const saveBtn = this.sidebarElement.querySelector('#pcb-save-selector');
+    const clearBtn = this.sidebarElement.querySelector('#pcb-clear-selector');
+    const addFallbackBtn = this.sidebarElement.querySelector('#pcb-add-fallback');
+
+    // Показ/скрытие поля атрибута
+    if (typeSelect && attrWrap) {
+      typeSelect.addEventListener('change', () => {
+        attrWrap.style.display = typeSelect.value === 'attribute' ? '' : 'none';
+      });
+    }
+
+    // Предпросмотр селектора
+    if (previewBtn) {
+      previewBtn.addEventListener('click', () => {
+        this.tryPreviewSelector();
+      });
+    }
+
+    // Сохранить селектор
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => this.saveSelector());
+    }
+
+    // Очистить форму
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.clearSelectorForm());
+    }
+
+    // Добавить fallback
+    if (addFallbackBtn) {
+      addFallbackBtn.addEventListener('click', () => this.addFallbackSelector());
+    }
+
+    // Делегирование на удаление fallback
+    const fallbackList = this.sidebarElement.querySelector('#pcb-fallback-list');
+    if (fallbackList) {
+      fallbackList.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.classList.contains('pcb-remove-fallback')) {
+          const idx = Number(target.getAttribute('data-index'));
+          this.removeFallbackSelector(idx);
+        }
+      });
+    }
+  }
+
+  // === Методы Selector Editor ===
   
-  private showAddFieldDialog() { if (!this.currentConfig) return; SidebarUIMethods.showAddFieldDialog(this.currentConfig, this.onMessage); }
-  private showEditFieldDialog(fieldName: string) { if (!this.currentConfig) return; SidebarUIMethods.showEditFieldDialog(this.currentConfig, fieldName, this.onMessage); }
-  private startFieldSelection(fieldName: string) { if (!this.currentConfig) return; const field = this.currentConfig.schema.fields.find((f: any) => f.name === fieldName); if (!field) return; SidebarUIMethods.startFieldSelection(fieldName, field.type, this.onMessage); this.selectedField = fieldName; this.currentSection = 'selector'; this.updateSidebarContent(); }
-  private deleteField(fieldName: string) { if (this.currentConfig) SidebarUIMethods.deleteField(this.currentConfig, fieldName, this.onMessage); }
+  private tryPreviewSelector(): boolean {
+    const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
+    const previewStatus = this.sidebarElement?.querySelector('#pcb-preview-status') as HTMLElement | null;
+    
+    const selector = primaryInput?.value?.trim() ?? '';
+    if (!selector) {
+      if (previewStatus) {
+        previewStatus.textContent = 'Введите селектор';
+        previewStatus.style.color = '#faad14';
+      }
+      return false;
+    }
+
+    try {
+      const elements = document.querySelectorAll(selector);
+      const found = elements.length > 0;
+      
+      if (previewStatus) {
+        if (found) {
+          previewStatus.textContent = `✅ Найдено элементов: ${elements.length}`;
+          previewStatus.style.color = '#52c41a';
+          // Подсвечиваем первый элемент
+          this.onMessage({ 
+            type: 'HIGHLIGHT_ELEMENT', 
+            selector, 
+            id: `sidebar_${Date.now()}`, 
+            timestamp: Date.now() 
+          });
+        } else {
+          previewStatus.textContent = '❌ Элементы не найдены';
+          previewStatus.style.color = '#ff4d4f';
+        }
+      }
+      
+      return found;
+    } catch (error) {
+      if (previewStatus) {
+        previewStatus.textContent = '❌ Неверный CSS селектор';
+        previewStatus.style.color = '#ff4d4f';
+      }
+      return false;
+    }
+  }
+
+  private saveSelector(): void {
+    if (!this.selectedField || !this.currentConfig) return;
+
+    const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
+    const typeSelect = this.sidebarElement?.querySelector('#pcb-extraction-type') as HTMLSelectElement | null;
+    const attrInput = this.sidebarElement?.querySelector('#pcb-attribute-name') as HTMLInputElement | null;
+    const fallbackInputs = this.sidebarElement?.querySelectorAll('.pcb-fallback-input') as NodeListOf<HTMLInputElement>;
+
+    const primary = primaryInput?.value?.trim() ?? '';
+    const type = typeSelect?.value ?? 'text';
+    const attribute = type === 'attribute' ? (attrInput?.value?.trim() ?? 'value') : undefined;
+    const fallback = Array.from(fallbackInputs).map(input => input.value.trim()).filter(v => v);
+
+    if (!primary) {
+      this.showNotification('Введите основной селектор', 'error');
+      return;
+    }
+
+    const selectorConfig: SelectorConfig = {
+      primary,
+      type: type as any,
+      ...(attribute ? { attribute } : {}),
+      ...(fallback.length > 0 ? { fallback } : {})
+    };
+
+    this.onMessage({
+      type: 'UPDATE_SELECTOR',
+      fieldName: this.selectedField,
+      selectorConfig,
+      id: `sidebar_${Date.now()}`,
+      timestamp: Date.now()
+    });
+
+    this.showNotification(`Селектор для поля "${this.selectedField}" сохранён`, 'success');
+  }
+
+  private clearSelectorForm(): void {
+    const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
+    const typeSelect = this.sidebarElement?.querySelector('#pcb-extraction-type') as HTMLSelectElement | null;
+    const attrInput = this.sidebarElement?.querySelector('#pcb-attribute-name') as HTMLInputElement | null;
+    const attrWrap = this.sidebarElement?.querySelector('#pcb-attribute-wrap') as HTMLElement | null;
+    const fallbackList = this.sidebarElement?.querySelector('#pcb-fallback-list') as HTMLElement | null;
+    const previewStatus = this.sidebarElement?.querySelector('#pcb-preview-status') as HTMLElement | null;
+
+    if (primaryInput) primaryInput.value = '';
+    if (typeSelect) typeSelect.value = 'text';
+    if (attrInput) attrInput.value = 'value';
+    if (attrWrap) attrWrap.style.display = 'none';
+    if (fallbackList) fallbackList.innerHTML = '<div style="text-align: center; padding: 20px; color: #999; font-size: 13px;">Fallback селекторы отсутствуют</div>';
+    if (previewStatus) {
+      previewStatus.textContent = '';
+      previewStatus.style.color = '#666';
+    }
+  }
+
+  private addFallbackSelector(): void {
+    const fallbackList = this.sidebarElement?.querySelector('#pcb-fallback-list') as HTMLElement | null;
+    if (!fallbackList) return;
+
+    // Убираем placeholder если есть
+    const placeholder = fallbackList.querySelector('div');
+    if (placeholder && placeholder.textContent?.includes('отсутствуют')) {
+      placeholder.remove();
+    }
+
+    const existingItems = fallbackList.querySelectorAll('.pcb-fallback-item').length;
+    const newIndex = existingItems;
+
+    const itemHtml = `
+      <div class="pcb-fallback-item" data-index="${newIndex}" style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+        <input type="text" value="" class="pcb-fallback-input" placeholder="Введите fallback селектор" style="flex:1;padding:8px;border:1px solid #e8e8e8;border-radius:6px;font-family:monospace;font-size:12px;" />
+        <button class="pcb-remove-fallback btn btn--danger btn--small" data-index="${newIndex}">✖</button>
+      </div>
+    `;
+
+    fallbackList.insertAdjacentHTML('beforeend', itemHtml);
+  }
+
+  private removeFallbackSelector(index: number): void {
+    const item = this.sidebarElement?.querySelector(`[data-index="${index}"]`) as HTMLElement | null;
+    if (item) item.remove();
+
+    // Если не осталось элементов - показываем placeholder
+    const fallbackList = this.sidebarElement?.querySelector('#pcb-fallback-list') as HTMLElement | null;
+    if (fallbackList && fallbackList.children.length === 0) {
+      fallbackList.innerHTML = '<div style="text-align: center; padding: 20px; color: #999; font-size: 13px;">Fallback селекторы отсутствуют</div>';
+    }
+  }
+
+  private autoFillSelectorForm(selectorData: any): void {
+    // Автоматически заполняем форму после выбора элемента
+    const primaryInput = this.sidebarElement?.querySelector('#pcb-primary-selector') as HTMLInputElement | null;
+    if (primaryInput && selectorData.selector) {
+      primaryInput.value = selectorData.selector;
+    }
+  }
+
+  // === Методы-обертки ===
+  private showFieldSelectionPrompt() { 
+    if (!this.currentConfig) return; 
+    SidebarUIMethods.showFieldSelectionPrompt(this.currentConfig, this.onMessage); 
+  }
+  
+  private exportConfig() { 
+    if (!this.currentConfig) return; 
+    SidebarUIMethods.exportConfig(this.currentConfig); 
+  }
+  
+  private updateHistoryDisplay() { 
+    if (!this.sidebarElement) return; 
+    const list = this.sidebarElement.querySelector('#pcb-history-list'); 
+    if (!list) return; 
+    list.innerHTML = this.selectionHistory.map((m: ElementSelectedMessage) => SidebarUIMethods.renderHistoryItem(m)).join(''); 
+    const historyItems = this.sidebarElement!.querySelectorAll('.pcb-history-item'); 
+    historyItems.forEach((item: Element) => { 
+      item.addEventListener('click', (e: Event) => { 
+        const fieldName = (e.currentTarget as HTMLElement).getAttribute('data-field-name'); 
+        if (fieldName) this.openSelectorEditor(fieldName); 
+      }); 
+    }); 
+  }
+  
+  private showAddFieldDialog() { 
+    if (!this.currentConfig) return; 
+    SidebarUIMethods.showAddFieldDialog(this.currentConfig, this.onMessage); 
+  }
+  
+  private showEditFieldDialog(fieldName: string) { 
+    if (!this.currentConfig) return; 
+    SidebarUIMethods.showEditFieldDialog(this.currentConfig, fieldName, this.onMessage); 
+  }
+  
+  private startFieldSelection(fieldName: string) { 
+    if (!this.currentConfig) return; 
+    const field = this.currentConfig.schema.fields.find((f: any) => f.name === fieldName); 
+    if (!field) return; 
+    SidebarUIMethods.startFieldSelection(fieldName, field.type, this.onMessage); 
+    this.selectedField = fieldName; 
+    this.currentSection = 'selector'; 
+    this.updateSidebarContent(); 
+  }
+  
+  private deleteField(fieldName: string) { 
+    if (this.currentConfig) SidebarUIMethods.deleteField(this.currentConfig, fieldName, this.onMessage); 
+  }
 }
