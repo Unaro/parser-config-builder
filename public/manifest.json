@@ -30,15 +30,8 @@
     }
   },
   
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content-script.js"],
-    "css": ["content-styles.css"],
-    "run_at": "document_start"
-  }],
-  
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_title": "Parser Config Builder",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -55,8 +48,19 @@
     "128": "icons/icon-128.png"
   },
   
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content-script.js"],
+    "css": ["content-styles.css"],
+    "run_at": "document_start"
+  }],
+  
   "web_accessible_resources": [{
-    "resources": ["popup.html", "popup.js", "popup.css"],
+    "resources": [
+      "src/popup/popup.html",
+      "popup.js",
+      "popup.css"
+    ],
     "matches": ["<all_urls>"]
   }]
 }
