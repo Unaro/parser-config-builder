@@ -51,7 +51,7 @@
   "content_scripts": [{
     "matches": ["<all_urls>"],
     "js": ["content-script.js"],
-    "css": ["content-script.css"],
+    "css": ["content-styles.css"],
     "run_at": "document_start"
   }],
   
@@ -59,7 +59,15 @@
     "resources": [
       "src/popup/popup.html",
       "popup.js",
-      "popup.css"
+      "popup.css",
+      "icons/icon-16.png",
+      "icons/icon-32.png",
+      "icons/icon-48.png",
+      "icons/icon-128.png",
+      "icons/icon-active-16.png",
+      "icons/icon-active-32.png",
+      "icons/icon-active-48.png",
+      "icons/icon-active-128.png"
     ],
     "matches": ["<all_urls>"]
   }]
