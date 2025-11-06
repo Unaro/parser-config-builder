@@ -1,6 +1,5 @@
 /**
- * Zustand store для управления состоянием конфигураций парсера
- * Client state только для UI
+ * Zustand store для управления конфигурациями
  * @module parser-config.store
  * @version 1.0.0
  */
@@ -9,9 +8,6 @@ import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import type { ParserConfig } from '@lib/types/parser.types';
 
-/**
- * Состояние конфигураций парсера
- */
 interface ParserConfigState {
   configs: ParserConfig[];
   activeConfigId: string | null;
@@ -20,37 +16,21 @@ interface ParserConfigState {
   error: string | null;
 }
 
-/**
- * Действия над состоянием
- */
 interface ParserConfigActions {
-  // CRUD операции
   addConfig: (config: ParserConfig) => void;
   updateConfig: (id: string, updates: Partial<ParserConfig>) => void;
   deleteConfig: (id: string) => void;
   setConfigs: (configs: ParserConfig[]) => void;
-  
-  // Управление активной конфигурацией
   setActiveConfig: (id: string | null) => void;
-  
-  // UI состояние
   setEditing: (isEditing: boolean) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
-  
-  // Утилиты
   clearError: () => void;
   reset: () => void;
 }
 
-/**
- * Полный тип store
- */
 type ParserConfigStore = ParserConfigState & ParserConfigActions;
 
-/**
- * Начальное состояние
- */
 const initialState: ParserConfigState = {
   configs: [],
   activeConfigId: null,
@@ -59,16 +39,12 @@ const initialState: ParserConfigState = {
   error: null
 };
 
-/**
- * Zustand store для конфигураций парсера
- */
 export const useParserConfigStore = create<ParserConfigStore>()(
   devtools(
     persist(
       (set) => ({
         ...initialState,
 
-        // CRUD операции
         addConfig: (config) =>
           set((state) => ({
             configs: [...state.configs, config]
@@ -90,11 +66,9 @@ export const useParserConfigStore = create<ParserConfigStore>()(
         setConfigs: (configs) =>
           set({ configs }),
 
-        // Управление активной конфигурацией
         setActiveConfig: (id) =>
           set({ activeConfigId: id }),
 
-        // UI состояние
         setEditing: (isEditing) =>
           set({ isEditing }),
 
@@ -104,7 +78,6 @@ export const useParserConfigStore = create<ParserConfigStore>()(
         setError: (error) =>
           set({ error }),
 
-        // Утилиты
         clearError: () =>
           set({ error: null }),
 
@@ -122,9 +95,6 @@ export const useParserConfigStore = create<ParserConfigStore>()(
   )
 );
 
-/**
- * Селекторы для удобного доступа к состоянию
- */
 export const selectActiveConfig = (state: ParserConfigStore): ParserConfig | undefined =>
   state.configs.find((c) => c.id === state.activeConfigId);
 
@@ -132,9 +102,4 @@ export const selectConfigById = (id: string) => (state: ParserConfigStore): Pars
   state.configs.find((c) => c.id === id);
 
 export const selectConfigsByUrl = (url: string) => (state: ParserConfigStore): ParserConfig[] =>
-  state.configs.filter((config) => {
-    if (typeof config.targetUrl === 'string') {
-      return url.includes(config.targetUrl);
-    }
-    return config.targetUrl.test(url);
-  });
+  state.configs.filter(config => url.startsWith(config.targetUrl));

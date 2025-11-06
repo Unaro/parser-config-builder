@@ -5,38 +5,34 @@
  */
 
 /**
+ * Тип поля селектора
+ */
+export type FieldType = 'string' | 'array' | 'object' | 'image';
+
+/**
+ * Определение кастомного поля
+ */
+export interface CustomField {
+  readonly id: string;
+  readonly name: string;
+  readonly key: string;
+  readonly type: FieldType;
+  readonly selector: string;
+  readonly required: boolean;
+  readonly description?: string;
+}
+
+/**
  * Основная конфигурация парсера для сайта
  */
 export interface ParserConfig {
   readonly id: string;
   readonly name: string;
   readonly version: string;
-  readonly targetUrl: RegExp | string;
-  readonly selectors: SelectorConfig;
+  readonly targetUrl: string;
+  readonly fields: readonly CustomField[];
   readonly metadata: ParserMetadata;
   readonly options?: ParserOptions;
-}
-
-/**
- * Конфигурация селекторов для извлечения данных
- */
-export interface SelectorConfig {
-  /** CSS-селектор для заголовка манги/комикса */
-  readonly title: string;
-  /** CSS-селектор для списка глав */
-  readonly chapters: string;
-  /** CSS-селектор для изображений страниц */
-  readonly images: string;
-  /** CSS-селектор для кнопки следующей страницы */
-  readonly nextPage?: string;
-  /** CSS-селектор для автора */
-  readonly author?: string;
-  /** CSS-селектор для описания */
-  readonly description?: string;
-  /** CSS-селектор для обложки */
-  readonly cover?: string;
-  /** CSS-селектор для жанров/тегов */
-  readonly tags?: string;
 }
 
 /**
@@ -55,46 +51,16 @@ export interface ParserMetadata {
  * Опции парсера
  */
 export interface ParserOptions {
-  /** Задержка между запросами (мс) */
   readonly delay?: number;
-  /** Максимальное количество попыток */
   readonly maxRetries?: number;
-  /** User-Agent для запросов */
   readonly userAgent?: string;
-  /** Дополнительные заголовки */
   readonly headers?: Record<string, string>;
 }
 
 /**
- * Результат парсинга
+ * Результат парсинга (динамический)
  */
-export interface ParsedData {
-  readonly title: string;
-  readonly author?: string;
-  readonly description?: string;
-  readonly cover?: string;
-  readonly tags?: readonly string[];
-  readonly chapters: readonly Chapter[];
-}
-
-/**
- * Данные главы
- */
-export interface Chapter {
-  readonly id: string;
-  readonly title: string;
-  readonly url: string;
-  readonly number: number;
-  readonly pages?: readonly Page[];
-}
-
-/**
- * Данные страницы
- */
-export interface Page {
-  readonly number: number;
-  readonly imageUrl: string;
-}
+export type ParsedData = Record<string, string | string[] | Record<string, unknown>>;
 
 /**
  * Статус валидации селектора
@@ -110,4 +76,30 @@ export interface SelectorValidationResult {
   readonly elementCount: number;
   readonly error?: string;
   readonly previewText?: string;
+  readonly arrayPreview?: string[];
+}
+
+// Устаревшие типы для обратной совместимости (будут удалены)
+export interface SelectorConfig {
+  readonly title: string;
+  readonly chapters: string;
+  readonly images: string;
+  readonly nextPage?: string;
+  readonly author?: string;
+  readonly description?: string;
+  readonly cover?: string;
+  readonly tags?: string;
+}
+
+export interface Chapter {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+  readonly number: number;
+  readonly pages?: readonly Page[];
+}
+
+export interface Page {
+  readonly number: number;
+  readonly imageUrl: string;
 }

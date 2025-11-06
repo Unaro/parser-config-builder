@@ -1,63 +1,101 @@
 /**
- * Background Script для расширения
- * Service Worker в Chrome, Background Script в Firefox
+ * Background Script
  * @module background
  * @version 1.0.0
  */
 
 import { browser } from '@lib/utils/browser-api';
-import { eventBus } from '@lib/events/event-bus';
 import { configRepository } from '@lib/storage/config-repository';
-import type { 
-  ParserConfigCreatedEvent,
-  ParserConfigUpdatedEvent,
-  ParserConfigDeletedEvent 
-} from '@lib/events/parser.events';
+import type { ParserConfig } from '@lib/types/parser.types';
+import type Browser from 'webextension-polyfill';
 
-console.log('[Background] Parser Config Builder extension loaded');
+console.log('[Background] Parser Config Builder loaded');
 
-/**
- * Подписка на события конфигураций
- */
-eventBus.subscribe<ParserConfigCreatedEvent['data']>(
-  'parser.config.created',
-  async (event) => {
-    console.log('[Background] Config created:', event.data.name);
-    await configRepository.save(event.data);
+browser.runtime.onMessage.addListener((message: unknown, _sender: Browser.Runtime.MessageSender) => {
+  console.log('[Background] Message received:', message);
+  
+  if (isConfigCreatedMessage(message)) {
+    return handleConfigCreated(message.config);
   }
-);
-
-eventBus.subscribe<ParserConfigUpdatedEvent['data']>(
-  'parser.config.updated',
-  async (event) => {
-    console.log('[Background] Config updated:', event.data.name);
-    await configRepository.save(event.data);
+  
+  if (isConfigUpdatedMessage(message)) {
+    return handleConfigUpdated(message.config);
   }
-);
-
-eventBus.subscribe<ParserConfigDeletedEvent['data']>(
-  'parser.config.deleted',
-  async (event) => {
-    console.log('[Background] Config deleted:', event.data.configId);
-    await configRepository.delete(event.data.configId);
+  
+  if (isConfigDeletedMessage(message)) {
+    return handleConfigDeleted(message.configId);
   }
-);
+  
+  return undefined;
+});
 
-/**
- * Обработка установки расширения
- */
+function isConfigCreatedMessage(message: unknown): message is { type: 'CONFIG_CREATED'; config: ParserConfig } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    (message as { type: unknown }).type === 'CONFIG_CREATED'
+  );
+}
+
+function isConfigUpdatedMessage(message: unknown): message is { type: 'CONFIG_UPDATED'; config: ParserConfig } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    (message as { type: unknown }).type === 'CONFIG_UPDATED'
+  );
+}
+
+function isConfigDeletedMessage(message: unknown): message is { type: 'CONFIG_DELETED'; configId: string } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    (message as { type: unknown }).type === 'CONFIG_DELETED'
+  );
+}
+
+async function handleConfigCreated(config: ParserConfig): Promise<{ success: boolean }> {
+  try {
+    console.log('[Background] Saving new config:', config.name);
+    await configRepository.save(config);
+    console.log('[Background] Config saved successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Error saving config:', error);
+    return { success: false };
+  }
+}
+
+async function handleConfigUpdated(config: ParserConfig): Promise<{ success: boolean }> {
+  try {
+    console.log('[Background] Updating config:', config.name);
+    await configRepository.save(config);
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Error updating config:', error);
+    return { success: false };
+  }
+}
+
+async function handleConfigDeleted(configId: string): Promise<{ success: boolean }> {
+  try {
+    console.log('[Background] Deleting config:', configId);
+    await configRepository.delete(configId);
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Error deleting config:', error);
+    return { success: false };
+  }
+}
+
 browser.runtime.onInstalled.addListener((details: { reason: string }) => {
   console.log('[Background] Extension installed:', details.reason);
   
   if (details.reason === 'install') {
-    // Первая установка - можно показать welcome страницу
     void browser.tabs.create({
-      url: browser.runtime.getURL('options/index.html')
+      url: browser.runtime.getURL('src/options/index.html')
     });
   }
 });
-
-/**
- * Экспорт для тестов
- */
-export { eventBus, configRepository };

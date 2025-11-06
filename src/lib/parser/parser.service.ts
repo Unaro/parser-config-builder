@@ -1,117 +1,89 @@
 /**
- * Service для парсинга страниц манги/комиксов
+ * Service для парсинга с динамическими полями
  * @module parser.service
  * @version 1.0.0
  */
 
-import type { ParserConfig, ParsedData, Chapter, Page } from '../types/parser.types';
+import type { ParserConfig, ParsedData, CustomField } from '../types/parser.types';
 
-/**
- * Сервис для парсинга страниц
- */
 export class ParserService {
   /**
-   * Парсить страницу с использованием конфигурации
+   * Парсить страницу с использованием динамической конфигурации
    */
   async parse(config: ParserConfig, document: Document): Promise<ParsedData> {
-    const { selectors } = config;
+    const result: ParsedData = {};
 
-    const title = this.extractText(document, selectors.title);
-    const author = selectors.author 
-      ? this.extractText(document, selectors.author) 
-      : undefined;
-    const description = selectors.description 
-      ? this.extractText(document, selectors.description) 
-      : undefined;
-    const cover = selectors.cover 
-      ? this.extractAttribute(document, selectors.cover, 'src') 
-      : undefined;
-    const tags = selectors.tags 
-      ? this.extractTextArray(document, selectors.tags) 
-      : undefined;
+    for (const field of config.fields) {
+      const value = this.extractField(document, field);
+      result[field.key] = value;
+    }
 
-    const chapters = this.extractChapters(document, selectors.chapters);
-
-    return {
-      title,
-      author,
-      description,
-      cover,
-      tags,
-      chapters
-    };
+    return result;
   }
 
   /**
-   * Извлечь текст из элемента по селектору
+   * Извлечь значение поля по его типу
    */
+  private extractField(
+    document: Document,
+    field: CustomField
+  ): string | string[] | Record<string, unknown> {
+    const { type, selector } = field;
+
+    switch (type) {
+      case 'string':
+        return this.extractText(document, selector);
+      
+      case 'array':
+        return this.extractArray(document, selector);
+      
+      case 'image':
+        return this.extractImage(document, selector);
+      
+      case 'object':
+        return this.extractObject(document, selector);
+      
+      default:
+        return '';
+    }
+  }
+
   private extractText(document: Document, selector: string): string {
     const element = document.querySelector(selector);
     return element?.textContent?.trim() ?? '';
   }
 
-  /**
-   * Извлечь массив текстов из элементов по селектору
-   */
-  private extractTextArray(document: Document, selector: string): readonly string[] {
+  private extractArray(document: Document, selector: string): string[] {
     const elements = document.querySelectorAll(selector);
     return Array.from(elements).map(el => el.textContent?.trim() ?? '');
   }
 
-  /**
-   * Извлечь атрибут из элемента по селектору
-   */
-  private extractAttribute(
-    document: Document, 
-    selector: string, 
-    attribute: string
-  ): string | undefined {
+  private extractImage(document: Document, selector: string): string {
     const element = document.querySelector(selector);
-    return element?.getAttribute(attribute) ?? undefined;
-  }
-
-  /**
-   * Извлечь главы из элементов
-   */
-  private extractChapters(document: Document, selector: string): readonly Chapter[] {
-    const elements = document.querySelectorAll(selector);
+    if (!element) return '';
     
-    return Array.from(elements).map((element, index) => {
-      const link = element.querySelector('a');
-      const title = element.textContent?.trim() ?? '';
-      const url = link?.href ?? '';
-      
-      return {
-        id: crypto.randomUUID(),
-        title,
-        url,
-        number: index + 1
-      };
-    });
+    const img = element as HTMLImageElement;
+    return img.src || img.dataset.src || element.getAttribute('src') || '';
   }
 
-  /**
-   * Извлечь изображения страниц
-   */
-  extractImages(document: Document, selector: string): readonly Page[] {
-    const elements = document.querySelectorAll(selector);
+  private extractObject(document: Document, selector: string): Record<string, unknown> {
+    const element = document.querySelector(selector);
+    if (!element) return {};
     
-    return Array.from(elements).map((element, index) => {
-      const img = element as HTMLImageElement;
-      return {
-        number: index + 1,
-        imageUrl: img.src || img.dataset.src || ''
-      };
-    });
+    return {
+      text: element.textContent?.trim() ?? '',
+      html: element.innerHTML
+    };
   }
 
   /**
-   * Валидировать селектор на текущей странице
+   * Валидировать селектор
    */
-  validateSelector(document: Document, selector: string): {
+  validateSelector(document: Document, selector: string, type: string): {
     isValid: boolean;
     elementCount: number;
     previewText?: string;
+    arrayPreview?: string[];
     error?: string;
   } {
     try {
@@ -119,21 +91,29 @@ export class ParserService {
       const elementCount = elements.length;
       
       if (elementCount === 0) {
-        return {
-          isValid: false,
-          elementCount: 0,
-          error: 'No elements found'
-        };
+        return { isValid: false, elementCount: 0, error: 'No elements found' };
       }
 
-      const firstElement = elements[0];
-      const previewText = firstElement?.textContent?.trim().substring(0, 100);
+      if (type === 'array') {
+        const arrayPreview = Array.from(elements)
+          .slice(0, 3)
+          .map(el => el.textContent?.trim() ?? '');
+        
+        return {
+          isValid: true,
+          elementCount,
+          arrayPreview
+        };
+      } else {
+        const firstElement = elements[0];
+        const previewText = firstElement?.textContent?.trim().substring(0, 100);
 
-      return {
-        isValid: true,
-        elementCount,
-        previewText
-      };
+        return {
+          isValid: true,
+          elementCount,
+          previewText
+        };
+      }
     } catch (error) {
       return {
         isValid: false,
@@ -144,15 +124,20 @@ export class ParserService {
   }
 
   /**
-   * Сгенерировать CSS селектор для элемента
+   * Сгенерировать селектор для элемента
+   * Если detectArray = true, попытается найти селектор для массива элементов
    */
-  generateSelector(element: HTMLElement): string {
+  generateSelector(element: HTMLElement, detectArray = false): string {
+    if (detectArray) {
+      return this.generateArraySelector(element);
+    }
+
     if (element.id) {
       return `#${element.id}`;
     }
 
     const classes = Array.from(element.classList)
-      .filter(cls => !cls.startsWith('hover') && !cls.startsWith('active'))
+      .filter(cls => !cls.startsWith('hover') && !cls.startsWith('active') && !cls.startsWith('focus'))
       .join('.');
     
     if (classes) {
@@ -163,6 +148,74 @@ export class ParserService {
       }
     }
 
+    return this.generatePathSelector(element);
+  }
+
+  /**
+   * Сгенерировать селектор для массива элементов
+   * Кликнули на один элемент → находим все похожие
+   */
+  private generateArraySelector(element: HTMLElement): string {
+    const parent = element.parentElement;
+    if (!parent) {
+      return this.generateSelector(element, false);
+    }
+
+    // Находим всех siblings с таким же тегом и классами
+    const siblings = Array.from(parent.children).filter(
+      (child): child is HTMLElement => 
+        child.tagName === element.tagName &&
+        child.className === element.className
+    );
+
+    if (siblings.length > 1) {
+      // Есть похожие элементы - создаем общий селектор
+      const elementClasses = Array.from(element.classList).join('.');
+      const parentSelector = this.generateSimpleSelector(parent);
+      
+      if (elementClasses) {
+        return `${parentSelector} ${element.tagName.toLowerCase()}.${elementClasses}`;
+      } else {
+        return `${parentSelector} ${element.tagName.toLowerCase()}`;
+      }
+    }
+
+    // Нет siblings - поднимаемся выше
+    if (parent.parentElement) {
+      const grandParent = parent.parentElement;
+      const parentSiblings = Array.from(grandParent.children).filter(
+        (child): child is HTMLElement => child.tagName === parent.tagName
+      );
+
+      if (parentSiblings.length > 1) {
+        const elementClasses = Array.from(element.classList).join('.');
+        const parentClasses = Array.from(parent.classList).join('.');
+        const grandParentSelector = this.generateSimpleSelector(grandParent);
+        
+        return `${grandParentSelector} ${parent.tagName.toLowerCase()}${parentClasses ? '.' + parentClasses : ''} ${element.tagName.toLowerCase()}${elementClasses ? '.' + elementClasses : ''}`;
+      }
+    }
+
+    return this.generateSelector(element, false);
+  }
+
+  /**
+   * Простой селектор для элемента (без полного пути)
+   */
+  private generateSimpleSelector(element: HTMLElement): string {
+    if (element.id) return `#${element.id}`;
+    
+    const classes = Array.from(element.classList)
+      .filter(cls => !cls.startsWith('hover') && !cls.startsWith('active'))
+      .join('.');
+    
+    return classes ? `${element.tagName.toLowerCase()}.${classes}` : element.tagName.toLowerCase();
+  }
+
+  /**
+   * Полный путь селектора
+   */
+  private generatePathSelector(element: HTMLElement): string {
     const path: string[] = [];
     let current: HTMLElement | null = element;
 
@@ -198,7 +251,4 @@ export class ParserService {
   }
 }
 
-/**
- * Singleton экземпляр сервиса
- */
 export const parserService = new ParserService();

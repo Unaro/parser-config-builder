@@ -1,5 +1,5 @@
 /**
- * Content Script - главная точка входа
+ * Content Script с поддержкой динамических полей
  * @module content
  * @version 1.0.0
  */
@@ -14,16 +14,11 @@ import type { ElementPickRequestEvent } from '@lib/events/parser.events';
 import type { ParserConfig, ParsedData } from '@lib/types/parser.types';
 import './styles.css';
 
-console.log('[Content] Parser Config Builder content script loaded');
+console.log('[Content] Parser Config Builder loaded');
 
-/**
- * Инициализация при загрузке страницы
- */
 function init(): void {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      initTriggerButton();
-    });
+    document.addEventListener('DOMContentLoaded', () => initTriggerButton());
   } else {
     initTriggerButton();
   }
@@ -31,17 +26,12 @@ function init(): void {
 
 init();
 
-/**
- * Состояние element picker
- */
 let isPickerActive = false;
-let currentSelectorType: string | null = null;
+let currentFieldId: string | null = null;
+let currentFieldType: string | null = null;
 let overlay: HTMLDivElement | null = null;
 let hoveredElement: HTMLElement | null = null;
 
-/**
- * Обработка сообщений
- */
 browser.runtime.onMessage.addListener((message: unknown) => {
   if (isParsePageMessage(message)) {
     return handleParsePage(message.config);
@@ -55,28 +45,17 @@ browser.runtime.onMessage.addListener((message: unknown) => {
   return undefined;
 });
 
-function isParsePageMessage(message: unknown): message is { type: 'PARSE_PAGE'; config: ParserConfig } {
-  return (
-    typeof message === 'object' &&
-    message !== null &&
-    'type' in message &&
-    (message as { type: unknown }).type === 'PARSE_PAGE'
-  );
+function isParsePageMessage(msg: unknown): msg is { type: 'PARSE_PAGE'; config: ParserConfig } {
+  return typeof msg === 'object' && msg !== null && 'type' in msg && (msg as any).type === 'PARSE_PAGE';
 }
 
-function isOpenSidebarMessage(message: unknown): message is { type: 'OPEN_SIDEBAR' } {
-  return (
-    typeof message === 'object' &&
-    message !== null &&
-    'type' in message &&
-    (message as { type: unknown }).type === 'OPEN_SIDEBAR'
-  );
+function isOpenSidebarMessage(msg: unknown): msg is { type: 'OPEN_SIDEBAR' } {
+  return typeof msg === 'object' && msg !== null && 'type' in msg && (msg as any).type === 'OPEN_SIDEBAR';
 }
 
 async function handleParsePage(config: ParserConfig): Promise<ParsedData> {
   try {
     const data = await parserService.parse(config, document);
-    console.log('[Content] Parsed data:', data);
     return data;
   } catch (error) {
     console.error('[Content] Parse error:', error);
@@ -87,18 +66,17 @@ async function handleParsePage(config: ParserConfig): Promise<ParsedData> {
 eventBus.subscribe<ElementPickRequestEvent['data']>(
   'element.pick.request',
   (event) => {
-    console.log('[Content] Element pick requested:', event.data.selectorType);
-    activatePicker(event.data.selectorType);
+    console.log('[Content] Pick request:', event.data);
+    activatePicker(event.data.fieldId, event.data.fieldType);
   }
 );
 
-function activatePicker(selectorType: string): void {
-  if (isPickerActive) {
-    deactivatePicker();
-  }
+function activatePicker(fieldId: string, fieldType: string): void {
+  if (isPickerActive) deactivatePicker();
 
   isPickerActive = true;
-  currentSelectorType = selectorType;
+  currentFieldId = fieldId;
+  currentFieldType = fieldType;
   
   createOverlay();
   
@@ -110,9 +88,15 @@ function activatePicker(selectorType: string): void {
   document.body.style.cursor = 'crosshair';
 }
 
-function deactivatePicker(): void {
+function deactivatePicker(cancelled = false): void {
+  if (cancelled && currentFieldId) {
+    const event = ParserEventFactory.createElementPickCancelled(currentFieldId);
+    void eventBus.publish(event);
+  }
+
   isPickerActive = false;
-  currentSelectorType = null;
+  currentFieldId = null;
+  currentFieldType = null;
   hoveredElement = null;
   
   if (overlay) {
@@ -137,7 +121,6 @@ function createOverlay(): void {
 
 function updateOverlay(element: HTMLElement): void {
   if (!overlay) return;
-  
   const rect = element.getBoundingClientRect();
   overlay.style.top = `${rect.top + window.scrollY}px`;
   overlay.style.left = `${rect.left + window.scrollX}px`;
@@ -161,34 +144,38 @@ function handleMouseOut(): void {
 }
 
 function handleClick(event: MouseEvent): void {
-  if (!isPickerActive || !hoveredElement || !currentSelectorType) return;
+  if (!isPickerActive || !hoveredElement || !currentFieldId || !currentFieldType) return;
   
   const target = event.target as HTMLElement;
-  if (target.closest('#parser-config-builder-sidebar-root')) {
-    return;
-  }
+  if (target.closest('#parser-config-builder-sidebar-root')) return;
   
   event.preventDefault();
   event.stopPropagation();
   
-  const selector = parserService.generateSelector(hoveredElement);
-  const previewText = hoveredElement.textContent?.trim().substring(0, 100) ?? '';
+  // Определяем, нужно ли генерировать array selector
+  const isArrayType = currentFieldType === 'array';
+  const selector = parserService.generateSelector(hoveredElement, isArrayType);
+  
+  // Валидируем и получаем превью
+  const validation = parserService.validateSelector(document, selector, currentFieldType);
   
   const pickedEvent = ParserEventFactory.createElementPicked(
-    currentSelectorType as any,
+    currentFieldId,
     selector,
-    previewText
+    validation.previewText || hoveredElement.textContent?.trim().substring(0, 100) || '',
+    validation.elementCount,
+    validation.arrayPreview
   );
   
   void eventBus.publish(pickedEvent);
-  deactivatePicker();
+  deactivatePicker(false);
 }
 
 function handleKeyDown(event: KeyboardEvent): void {
   if (event.key === 'Escape' && isPickerActive) {
     event.preventDefault();
     event.stopPropagation();
-    deactivatePicker();
+    deactivatePicker(true); // cancelled = true
   }
 }
 
