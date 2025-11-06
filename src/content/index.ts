@@ -1,7 +1,7 @@
 /**
- * Content Script с поддержкой динамических полей
+ * Content Script
  * @module content
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 import { eventBus } from '@lib/events/event-bus';
@@ -55,8 +55,18 @@ function isOpenSidebarMessage(msg: unknown): msg is { type: 'OPEN_SIDEBAR' } {
 
 async function handleParsePage(config: ParserConfig): Promise<ParsedData> {
   try {
-    const data = await parserService.parse(config, document);
-    return data;
+    // Определяем тип текущей страницы
+    const pageConfig = parserService.detectPageType(config, window.location.href);
+    
+    if (!pageConfig) {
+      throw new Error('No matching page configuration found for this URL');
+    }
+
+    // Парсим страницу
+    const pageData = await parserService.parsePage(pageConfig, document);
+    
+    console.log('[Content] Parsed data:', pageData);
+    return pageData.data;
   } catch (error) {
     console.error('[Content] Parse error:', error);
     throw error;
@@ -152,11 +162,9 @@ function handleClick(event: MouseEvent): void {
   event.preventDefault();
   event.stopPropagation();
   
-  // Определяем, нужно ли генерировать array selector
   const isArrayType = currentFieldType === 'array';
   const selector = parserService.generateSelector(hoveredElement, isArrayType);
   
-  // Валидируем и получаем превью
   const validation = parserService.validateSelector(document, selector, currentFieldType);
   
   const pickedEvent = ParserEventFactory.createElementPicked(
@@ -175,7 +183,7 @@ function handleKeyDown(event: KeyboardEvent): void {
   if (event.key === 'Escape' && isPickerActive) {
     event.preventDefault();
     event.stopPropagation();
-    deactivatePicker(true); // cancelled = true
+    deactivatePicker(true);
   }
 }
 

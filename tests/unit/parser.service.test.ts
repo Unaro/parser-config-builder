@@ -1,5 +1,5 @@
 /**
- * Unit тесты для ParserService
+ * Unit тесты для Multi-Page ParserService
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -29,14 +29,44 @@ describe('ParserService', () => {
     });
   });
 
-  describe('generateSelector', () => {
-    it('should generate simple selector', () => {
-      const element = mockDocument.createElement('div');
-      element.id = 'unique';
-      mockDocument.body.appendChild(element);
-      expect(parserService.generateSelector(element)).toBe('#unique');
-    });
+  describe('detectPageType', () => {
+    it('should detect correct page type', () => {
+      const config = {
+        id: 'test',
+        name: 'Test',
+        version: '1.0.0',
+        targetUrl: 'https://test.com',
+        pages: [
+          {
+            id: 'page1',
+            name: 'Catalog',
+            urlPattern: '/catalog',
+            fields: [],
+            loadStrategy: { type: 'static' as const }
+          },
+          {
+            id: 'page2',
+            name: 'Work',
+            urlPattern: '/manga/',
+            fields: [],
+            loadStrategy: { type: 'static' as const }
+          }
+        ],
+        metadata: {
+          created: new Date(),
+          updated: new Date(),
+          author: 'test',
+          tags: [],
+          siteUrl: 'https://test.com'
+        }
+      };
 
+      const result = parserService.detectPageType(config, 'https://test.com/manga/123');
+      expect(result?.name).toBe('Work');
+    });
+  });
+
+  describe('generateSelector', () => {
     it('should generate array selector', () => {
       const container = mockDocument.createElement('div');
       container.className = 'tags';

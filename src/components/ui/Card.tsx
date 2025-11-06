@@ -1,82 +1,89 @@
 /**
- * Card компонент (Atom)
+ * Card UI компонент
  * @module components/ui/Card
- * @version 1.0.0
+ * @version 2.0.0
  */
 
-import type { HTMLAttributes } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  variant?: 'default' | 'bordered' | 'elevated';
+  variant?: 'default' | 'bordered';
+  children: ReactNode;
 }
 
-/**
- * Card компонент
- */
 export function Card({ 
-  variant = 'default', 
+  variant = 'default',
   className = '', 
   children, 
   ...props 
 }: CardProps) {
-  const baseStyles = 'rounded-lg bg-white';
-  
   const variantStyles = {
-    default: 'border border-gray-200',
-    bordered: 'border-2 border-gray-300',
-    elevated: 'shadow-lg'
+    default: 'bg-white shadow-sm',
+    bordered: 'bg-white border-2 border-blue-500 shadow-md'
   };
-  
-  const classes = `${baseStyles} ${variantStyles[variant]} ${className}`;
-  
+
   return (
-    <div className={classes} {...props}>
+    <div 
+      className={`rounded-lg overflow-hidden ${variantStyles[variant]} ${className}`}
+      {...props}
+    >
       {children}
     </div>
   );
 }
 
-/**
- * Card Header
- */
-export function CardHeader({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
+export function CardHeader({ 
+  className = '', 
+  children 
+}: { 
+  className?: string; 
+  children: ReactNode;
+}) {
   return (
-    <div className={`flex flex-col space-y-1.5 p-6 ${className}`} {...props} />
+    <div className={`px-6 py-4 border-b border-gray-200 ${className}`}>
+      {children}
+    </div>
   );
 }
 
-/**
- * Card Title
- */
-export function CardTitle({ className = '', ...props }: HTMLAttributes<HTMLHeadingElement>) {
+export function CardTitle({ 
+  className = '', 
+  children 
+}: { 
+  className?: string; 
+  children: ReactNode;
+}) {
   return (
-    <h3 className={`text-2xl font-semibold leading-none tracking-tight ${className}`} {...props} />
+    <h3 className={`text-lg font-semibold text-gray-900 ${className}`}>
+      {children}
+    </h3>
   );
 }
 
-/**
- * Card Description
- */
-export function CardDescription({ className = '', ...props }: HTMLAttributes<HTMLParagraphElement>) {
+export function CardContent({ 
+  className = '', 
+  children 
+}: { 
+  className?: string; 
+  children: ReactNode;
+}) {
   return (
-    <p className={`text-sm text-gray-500 ${className}`} {...props} />
+    <div className={`px-6 py-4 ${className}`}>
+      {children}
+    </div>
   );
 }
 
-/**
- * Card Content
- */
-export function CardContent({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
+export function CardFooter({ 
+  className = '', 
+  children 
+}: { 
+  className?: string; 
+  children: ReactNode;
+}) {
   return (
-    <div className={`p-6 pt-0 ${className}`} {...props} />
-  );
-}
-
-/**
- * Card Footer
- */
-export function CardFooter({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div className={`flex items-center p-6 pt-0 ${className}`} {...props} />
+    <div className={`px-6 py-4 border-t border-gray-200 ${className}`}>
+      {children}
+    </div>
   );
 }

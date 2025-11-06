@@ -1,27 +1,47 @@
 /**
- * Zod-схемы для валидации конфигурации парсера
+ * Zod-схемы для multi-page конфигурации
  * @module parser.schema
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 import { z } from 'zod';
 
-/**
- * Схема для кастомного поля
- */
+export const FieldTransformSchema = z.object({
+  type: z.enum(['regex', 'split', 'replace', 'trim', 'lowercase', 'uppercase']),
+  pattern: z.string().optional(),
+  replacement: z.string().optional(),
+  separator: z.string().optional()
+}).strict();
+
 export const CustomFieldSchema = z.object({
   id: z.string().uuid(),
-  name: z.string().min(1, 'Field name is required'),
-  key: z.string().min(1, 'Field key is required'),
-  type: z.enum(['string', 'array', 'object', 'image']),
-  selector: z.string().min(1, 'Selector is required'),
+  name: z.string().min(1),
+  key: z.string().min(1),
+  type: z.enum(['string', 'array', 'object', 'image', 'url', 'number']),
+  selector: z.string().min(1),
   required: z.boolean(),
+  description: z.string().optional(),
+  transform: FieldTransformSchema.optional()
+}).strict();
+
+export const WaitStrategySchema = z.object({
+  type: z.enum(['static', 'pagination', 'infinite-scroll', 'click-load', 'tab-switch', 'ajax-wait']),
+  selector: z.string().optional(),
+  timeout: z.number().min(0).max(30000).optional(),
+  scrollDistance: z.number().min(0).optional(),
+  waitForSelector: z.string().optional(),
+  maxIterations: z.number().min(1).max(100).optional()
+}).strict();
+
+export const PageConfigSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  urlPattern: z.string().min(1),
+  fields: z.array(CustomFieldSchema),
+  loadStrategy: WaitStrategySchema,
   description: z.string().optional()
 }).strict();
 
-/**
- * Схема для метаданных парсера
- */
 export const ParserMetadataSchema = z.object({
   created: z.coerce.date(),
   updated: z.coerce.date(),
@@ -31,9 +51,6 @@ export const ParserMetadataSchema = z.object({
   description: z.string().optional()
 }).strict();
 
-/**
- * Схема для опций парсера
- */
 export const ParserOptionsSchema = z.object({
   delay: z.number().min(0).max(10000).optional(),
   maxRetries: z.number().min(1).max(10).optional(),
@@ -41,20 +58,15 @@ export const ParserOptionsSchema = z.object({
   headers: z.record(z.string(), z.string()).optional()
 }).strict();
 
-/**
- * Основная схема конфигурации парсера
- */
 export const ParserConfigSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(100),
-  version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Version must be in semver format'),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
   targetUrl: z.string().url(),
-  fields: z.array(CustomFieldSchema).min(1, 'At least one field is required'),
+  pages: z.array(PageConfigSchema).min(1),
   metadata: ParserMetadataSchema,
   options: ParserOptionsSchema.optional()
 }).strict();
 
 export type ParserConfigInput = z.input<typeof ParserConfigSchema>;
 export type ParserConfigOutput = z.output<typeof ParserConfigSchema>;
-export type CustomFieldInput = z.input<typeof CustomFieldSchema>;
-export type CustomFieldOutput = z.output<typeof CustomFieldSchema>;
