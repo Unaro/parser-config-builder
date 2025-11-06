@@ -10,70 +10,55 @@ import { Card, CardHeader, CardTitle, CardContent } from '@components/ui/Card';
 import { useParserConfigStore } from '@state/parser-config.store';
 import { configRepository } from '@lib/storage/config-repository';
 import { browser, tabs } from '@lib/utils/browser-api';
+import { useCurrentTab } from '@lib/hooks/use-current-tab';
+import { useStorageSync } from '@lib/hooks/use-storage-sync';
 import type { ParserConfig } from '@lib/types/parser.types';
 
 /**
  * PopupApp компонент
  */
 export function PopupApp() {
-  const { configs, setConfigs, setActiveConfig } = useParserConfigStore();
-  const [currentUrl, setCurrentUrl] = useState<string>('');
+  const { configs } = useParserConfigStore();
+  const { url, isLoading: tabLoading } = useCurrentTab();
   const [matchingConfigs, setMatchingConfigs] = useState<ParserConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  useStorageSync();
 
   useEffect(() => {
-    void loadData();
-  }, []);
-
-  /**
-   * Загрузить данные при открытии popup
-   */
-  const loadData = async () => {
-    try {
-      // Получить текущую вкладку
-      const activeTab = await tabs.getActive();
-      if (activeTab?.url) {
-        setCurrentUrl(activeTab.url);
-      }
-
-      // Загрузить конфигурации из хранилища
-      const storedConfigs = await configRepository.findAll();
-      setConfigs(storedConfigs);
-
-      // Найти подходящие конфигурации для текущего URL
-      if (activeTab?.url) {
-        const matching = await configRepository.findByUrl(activeTab.url);
-        setMatchingConfigs(matching);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setIsLoading(false);
+    if (url) {
+      void findMatchingConfigs(url);
     }
+  }, [url, configs]);
+
+  const findMatchingConfigs = async (currentUrl: string) => {
+    const matching = await configRepository.findByUrl(currentUrl);
+    setMatchingConfigs(matching);
   };
 
-  /**
-   * Открыть страницу настроек
-   */
   const handleOpenOptions = () => {
     void browser.runtime.openOptionsPage();
   };
 
-  /**
-   * Активировать конфигурацию
-   */
   const handleActivateConfig = async (configId: string) => {
-    setActiveConfig(configId);
     await configRepository.setActive(configId);
-    alert('Конфигурация активирована!');
+    alert('Configuration activated!');
   };
 
-  if (isLoading) {
+  const handleCreateOnPage = async () => {
+    const activeTab = await tabs.getActive();
+    if (!activeTab?.id) return;
+
+    // Отправляем сообщение в content script для открытия Sidebar
+    await tabs.sendMessage(activeTab.id, { type: 'OPEN_SIDEBAR' });
+    window.close();
+  };
+
+  if (tabLoading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-          <p className="text-sm text-gray-600">Загрузка...</p>
+          <p className="text-sm text-gray-600">Loading...</p>
         </div>
       </div>
     );
@@ -89,7 +74,7 @@ export function PopupApp() {
           {matchingConfigs.length > 0 ? (
             <>
               <p className="text-sm text-gray-600">
-                Найдено конфигураций для этой страницы: {matchingConfigs.length}
+                Found {matchingConfigs.length} configuration(s)
               </p>
               
               <div className="space-y-2">
@@ -108,7 +93,7 @@ export function PopupApp() {
                       size="sm"
                       onClick={() => void handleActivateConfig(config.id)}
                     >
-                      Использовать
+                      Use
                     </Button>
                   </div>
                 ))}
@@ -117,25 +102,35 @@ export function PopupApp() {
           ) : (
             <div className="text-center py-4">
               <p className="text-sm text-gray-500">
-                Нет конфигураций для этой страницы
+                No configurations for this page
               </p>
-              <p className="text-xs text-gray-400 mt-1">
-                {currentUrl && `URL: ${currentUrl.substring(0, 40)}...`}
-              </p>
+              {url && (
+                <p className="text-xs text-gray-400 mt-1 truncate" title={url}>
+                  {url.substring(0, 50)}...
+                </p>
+              )}
             </div>
           )}
 
           <div className="pt-3 border-t space-y-2">
             <Button
+              variant="primary"
+              fullWidth
+              onClick={handleCreateOnPage}
+            >
+              Create Config on This Page
+            </Button>
+            
+            <Button
               variant="secondary"
               fullWidth
               onClick={handleOpenOptions}
             >
-              Управление конфигурациями
+              Manage All Configs
             </Button>
             
             <div className="text-xs text-center text-gray-400">
-              Всего конфигураций: {configs.length}
+              Total: {configs.length}
             </div>
           </div>
         </CardContent>

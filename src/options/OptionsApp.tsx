@@ -4,12 +4,12 @@
  * @version 1.0.0
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@components/ui/Button';
 import { ConfigBuilder } from '@components/features/ConfigBuilder';
 import { ConfigList } from '@components/features/ConfigList';
 import { useParserConfigStore } from '@state/parser-config.store';
-import { configRepository } from '@lib/storage/config-repository';
+import { useStorageSync } from '@lib/hooks/use-storage-sync';
 
 type View = 'list' | 'create' | 'edit';
 
@@ -17,32 +17,11 @@ type View = 'list' | 'create' | 'edit';
  * OptionsApp компонент
  */
 export function OptionsApp() {
-  const { configs, setConfigs, setActiveConfig } = useParserConfigStore();
+  const { configs, setActiveConfig } = useParserConfigStore();
   const [currentView, setCurrentView] = useState<View>('list');
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    void loadConfigs();
-  }, []);
-
-  /**
-   * Загрузить конфигурации из хранилища
-   */
-  const loadConfigs = async () => {
-    try {
-      const storedConfigs = await configRepository.findAll();
-      setConfigs(storedConfigs);
-      
-      const activeConfig = await configRepository.getActive();
-      if (activeConfig) {
-        setActiveConfig(activeConfig.id);
-      }
-    } catch (error) {
-      console.error('Error loading configs:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  
+  // Синхронизация с хранилищем
+  useStorageSync();
 
   /**
    * Создать новую конфигурацию
@@ -57,19 +36,7 @@ export function OptionsApp() {
    */
   const handleBackToList = () => {
     setCurrentView('list');
-    void loadConfigs();
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading configurations...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">

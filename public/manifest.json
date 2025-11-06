@@ -43,7 +43,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   
   "host_permissions": [
@@ -52,7 +53,12 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["src/content/*", "assets/*"],
+      "resources": [
+        "src/content/*",
+        "assets/*",
+        "*.js",
+        "*.css"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

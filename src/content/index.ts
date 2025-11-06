@@ -1,6 +1,5 @@
 /**
- * Content Script для визуального выбора элементов на странице
- * Инъектируется на все страницы
+ * Content Script - главная точка входа
  * @module content
  * @version 1.0.0
  */
@@ -8,9 +7,29 @@
 import { eventBus } from '@lib/events/event-bus';
 import { parserService } from '@lib/parser/parser.service';
 import { ParserEventFactory } from '@lib/events/parser.events';
+import { browser } from '@lib/utils/browser-api';
+import { initTriggerButton } from './trigger-button';
+import { mountSidebar } from './Sidebar';
 import type { ElementPickRequestEvent } from '@lib/events/parser.events';
+import type { ParserConfig, ParsedData } from '@lib/types/parser.types';
+import './styles.css';
 
 console.log('[Content] Parser Config Builder content script loaded');
+
+/**
+ * Инициализация при загрузке страницы
+ */
+function init(): void {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      initTriggerButton();
+    });
+  } else {
+    initTriggerButton();
+  }
+}
+
+init();
 
 /**
  * Состояние element picker
@@ -21,8 +40,50 @@ let overlay: HTMLDivElement | null = null;
 let hoveredElement: HTMLElement | null = null;
 
 /**
- * Подписка на запрос выбора элемента
+ * Обработка сообщений
  */
+browser.runtime.onMessage.addListener((message: unknown) => {
+  if (isParsePageMessage(message)) {
+    return handleParsePage(message.config);
+  }
+  
+  if (isOpenSidebarMessage(message)) {
+    mountSidebar();
+    return Promise.resolve({ success: true });
+  }
+  
+  return undefined;
+});
+
+function isParsePageMessage(message: unknown): message is { type: 'PARSE_PAGE'; config: ParserConfig } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    (message as { type: unknown }).type === 'PARSE_PAGE'
+  );
+}
+
+function isOpenSidebarMessage(message: unknown): message is { type: 'OPEN_SIDEBAR' } {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'type' in message &&
+    (message as { type: unknown }).type === 'OPEN_SIDEBAR'
+  );
+}
+
+async function handleParsePage(config: ParserConfig): Promise<ParsedData> {
+  try {
+    const data = await parserService.parse(config, document);
+    console.log('[Content] Parsed data:', data);
+    return data;
+  } catch (error) {
+    console.error('[Content] Parse error:', error);
+    throw error;
+  }
+}
+
 eventBus.subscribe<ElementPickRequestEvent['data']>(
   'element.pick.request',
   (event) => {
@@ -31,9 +92,6 @@ eventBus.subscribe<ElementPickRequestEvent['data']>(
   }
 );
 
-/**
- * Активировать режим выбора элемента
- */
 function activatePicker(selectorType: string): void {
   if (isPickerActive) {
     deactivatePicker();
@@ -42,63 +100,41 @@ function activatePicker(selectorType: string): void {
   isPickerActive = true;
   currentSelectorType = selectorType;
   
-  // Создать оверлей
   createOverlay();
   
-  // Добавить обработчики событий
-  document.addEventListener('mouseover', handleMouseOver);
-  document.addEventListener('mouseout', handleMouseOut);
+  document.addEventListener('mouseover', handleMouseOver, true);
+  document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
-  document.addEventListener('keydown', handleKeyDown);
+  document.addEventListener('keydown', handleKeyDown, true);
   
-  // Изменить курсор
   document.body.style.cursor = 'crosshair';
 }
 
-/**
- * Деактивировать режим выбора элемента
- */
 function deactivatePicker(): void {
   isPickerActive = false;
   currentSelectorType = null;
   hoveredElement = null;
   
-  // Удалить оверлей
   if (overlay) {
     overlay.remove();
     overlay = null;
   }
   
-  // Удалить обработчики
-  document.removeEventListener('mouseover', handleMouseOver);
-  document.removeEventListener('mouseout', handleMouseOut);
+  document.removeEventListener('mouseover', handleMouseOver, true);
+  document.removeEventListener('mouseout', handleMouseOut, true);
   document.removeEventListener('click', handleClick, true);
-  document.removeEventListener('keydown', handleKeyDown);
+  document.removeEventListener('keydown', handleKeyDown, true);
   
-  // Восстановить курсор
   document.body.style.cursor = '';
 }
 
-/**
- * Создать оверлей для подсветки элемента
- */
 function createOverlay(): void {
   overlay = document.createElement('div');
   overlay.id = 'parser-config-builder-overlay';
-  overlay.style.cssText = `
-    position: absolute;
-    background: rgba(59, 130, 246, 0.3);
-    border: 2px solid rgb(59, 130, 246);
-    pointer-events: none;
-    z-index: 999999;
-    transition: all 0.1s ease;
-  `;
+  overlay.className = 'parser-config-builder-overlay';
   document.body.appendChild(overlay);
 }
 
-/**
- * Обновить позицию оверлея
- */
 function updateOverlay(element: HTMLElement): void {
   if (!overlay) return;
   
@@ -109,41 +145,35 @@ function updateOverlay(element: HTMLElement): void {
   overlay.style.height = `${rect.height}px`;
 }
 
-/**
- * Обработчик наведения мыши
- */
 function handleMouseOver(event: MouseEvent): void {
   if (!isPickerActive) return;
   
   const target = event.target as HTMLElement;
-  if (!target || target === overlay) return;
+  if (!target || target === overlay || target.closest('#parser-config-builder-sidebar-root')) return;
   
   hoveredElement = target;
   updateOverlay(target);
 }
 
-/**
- * Обработчик ухода мыши
- */
 function handleMouseOut(): void {
   if (!isPickerActive || !overlay) return;
   hoveredElement = null;
 }
 
-/**
- * Обработчик клика - выбор элемента
- */
 function handleClick(event: MouseEvent): void {
   if (!isPickerActive || !hoveredElement || !currentSelectorType) return;
+  
+  const target = event.target as HTMLElement;
+  if (target.closest('#parser-config-builder-sidebar-root')) {
+    return;
+  }
   
   event.preventDefault();
   event.stopPropagation();
   
-  // Сгенерировать селектор
   const selector = parserService.generateSelector(hoveredElement);
   const previewText = hoveredElement.textContent?.trim().substring(0, 100) ?? '';
   
-  // Отправить событие выбранного элемента
   const pickedEvent = ParserEventFactory.createElementPicked(
     currentSelectorType as any,
     selector,
@@ -151,21 +181,15 @@ function handleClick(event: MouseEvent): void {
   );
   
   void eventBus.publish(pickedEvent);
-  
-  // Деактивировать picker
   deactivatePicker();
 }
 
-/**
- * Обработчик нажатия клавиш - ESC для отмены
- */
 function handleKeyDown(event: KeyboardEvent): void {
   if (event.key === 'Escape' && isPickerActive) {
+    event.preventDefault();
+    event.stopPropagation();
     deactivatePicker();
   }
 }
 
-/**
- * Экспорт для тестов
- */
 export { activatePicker, deactivatePicker };

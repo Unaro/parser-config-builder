@@ -2,7 +2,7 @@
  * Стили для Content Script
  */
 
-#parser-config-builder-overlay {
+.parser-config-builder-overlay {
   position: absolute;
   background: rgba(59, 130, 246, 0.3);
   border: 2px solid rgb(59, 130, 246);
@@ -23,4 +23,28 @@
   pointer-events: none;
   z-index: 1000000;
   white-space: nowrap;
+}
+
+/* Sidebar контейнер */
+#parser-config-builder-sidebar-root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Кнопка триггер */
+#parser-config-builder-trigger {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Предотвращаем конфликты стилей со страницей */
+#parser-config-builder-sidebar-root * {
+  all: revert;
+}
+
+#parser-config-builder-sidebar-root button,
+#parser-config-builder-sidebar-root input,
+#parser-config-builder-sidebar-root select {
+  font-family: inherit;
 }

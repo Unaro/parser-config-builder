@@ -15,7 +15,8 @@ export default defineConfig(({ mode }) => ({
       manifest: mode === 'firefox' 
         ? './public/manifest.firefox.json'
         : './public/manifest.json',
-      watchFilePaths: ['src/**/*']
+      watchFilePaths: ['src/**/*'],
+      disableAutoLaunch: true
     })
   ],
   resolve: {
