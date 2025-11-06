@@ -12,22 +12,22 @@
   },
   
   "background": {
-    "service_worker": "background/index.js",
+    "service_worker": "src/background/index.ts",
     "type": "module"
   },
   
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/index.js"],
-      "css": ["content/styles.css"],
+      "js": ["src/content/index.ts"],
+      "css": ["src/content/styles.css"],
       "run_at": "document_idle",
       "all_frames": false
     }
   ],
   
   "action": {
-    "default_popup": "popup/index.html",
+    "default_popup": "src/popup/index.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png"
@@ -36,7 +36,7 @@
   },
   
   "options_ui": {
-    "page": "options/index.html",
+    "page": "src/options/index.html",
     "open_in_tab": true
   },
   
@@ -52,7 +52,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["content/*", "assets/*"],
+      "resources": ["src/content/*", "assets/*"],
       "matches": ["<all_urls>"]
     }
   ]

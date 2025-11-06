@@ -15,11 +15,7 @@ export default defineConfig(({ mode }) => ({
       manifest: mode === 'firefox' 
         ? './public/manifest.firefox.json'
         : './public/manifest.json',
-      watchFilePaths: ['src/**/*'],
-      additionalInputs: [
-        'src/popup/index.html',
-        'src/options/index.html'
-      ]
+      watchFilePaths: ['src/**/*']
     })
   ],
   resolve: {
@@ -32,13 +28,7 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: mode === 'firefox' ? 'dist-firefox' : 'dist-chrome',
-    rollupOptions: {
-      input: {
-        popup: 'src/popup/index.html',
-        options: 'src/options/index.html',
-        background: 'src/background/index.ts',
-        content: 'src/content/index.ts'
-      }
-    }
+    emptyOutDir: true,
+    sourcemap: mode !== 'production'
   }
 }));
