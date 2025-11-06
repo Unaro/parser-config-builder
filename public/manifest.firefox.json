@@ -1,5 +1,5 @@
 {
-  "manifest_version": 3,
+  "manifest_version": 2,
   "name": "Parser Config Builder",
   "version": "1.0.0",
   "description": "Visual browser extension for creating parser configurations for manga/comic sites",
@@ -12,8 +12,7 @@
   },
   
   "background": {
-    "service_worker": "background/index.js",
-    "type": "module"
+    "scripts": ["background/index.js"]
   },
   
   "content_scripts": [
@@ -26,7 +25,7 @@
     }
   ],
   
-  "action": {
+  "browser_action": {
     "default_popup": "popup/index.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -43,17 +42,18 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
-  ],
-  
-  "host_permissions": [
     "<all_urls>"
   ],
   
   "web_accessible_resources": [
-    {
-      "resources": ["content/*", "assets/*"],
-      "matches": ["<all_urls>"]
+    "content/*",
+    "assets/*"
+  ],
+  
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "parser-config-builder@unaro.com",
+      "strict_min_version": "109.0"
     }
-  ]
+  }
 }

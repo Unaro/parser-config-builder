@@ -1,0 +1,15 @@
+/**
+ * Стили для Popup
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50;
+}
+
+#root {
+  @apply min-h-full;
+}

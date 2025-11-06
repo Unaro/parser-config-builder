@@ -1,0 +1,26 @@
+/**
+ * Стили для Content Script
+ */
+
+#parser-config-builder-overlay {
+  position: absolute;
+  background: rgba(59, 130, 246, 0.3);
+  border: 2px solid rgb(59, 130, 246);
+  pointer-events: none;
+  z-index: 999999;
+  transition: all 0.1s ease;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.parser-config-builder-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: system-ui, -apple-system, sans-serif;
+  pointer-events: none;
+  z-index: 1000000;
+  white-space: nowrap;
+}

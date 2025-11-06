@@ -1,51 +1,44 @@
+/**
+ * Vite конфигурация для Web Extension
+ * @version 1.0.0
+ */
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'path';
+import webExtension from 'vite-plugin-web-extension';
+import path from 'path';
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
-  
+  plugins: [
+    react(),
+    webExtension({
+      manifest: mode === 'firefox' 
+        ? './public/manifest.firefox.json'
+        : './public/manifest.json',
+      watchFilePaths: ['src/**/*'],
+      additionalInputs: [
+        'src/popup/index.html',
+        'src/options/index.html'
+      ]
+    })
+  ],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@/components': resolve(__dirname, 'src/components'),
-      '@/utils': resolve(__dirname, 'src/utils'),
-      '@/types': resolve(__dirname, 'src/types'),
-    },
+      '@': path.resolve(__dirname, './src'),
+      '@lib': path.resolve(__dirname, './src/lib'),
+      '@components': path.resolve(__dirname, './src/components'),
+      '@state': path.resolve(__dirname, './src/state')
+    }
   },
-  
   build: {
+    outDir: mode === 'firefox' ? 'dist-firefox' : 'dist-chrome',
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, 'src/popup/popup.html'),
-        'content-script': resolve(__dirname, 'src/content/content-script.ts'),
-        background: resolve(__dirname, 'src/background/background.ts'),
-      },
-      output: {
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name].js',
-        assetFileNames: (assetInfo) => {
-          const extType = assetInfo.name?.split('.').pop();
-          if (extType === 'css') {
-            return '[name].css';
-          }
-          return '[name].[ext]';
-        },
-      },
-    },
-    outDir: 'dist',
-    emptyOutDir: true,
-    sourcemap: mode === 'development',
-  },
-
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(mode),
-  },
-
-  server: {
-    port: 3000,
-    hmr: {
-      port: 3001,
-    },
-  },
+        popup: 'src/popup/index.html',
+        options: 'src/options/index.html',
+        background: 'src/background/index.ts',
+        content: 'src/content/index.ts'
+      }
+    }
+  }
 }));
