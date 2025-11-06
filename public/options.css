@@ -1,0 +1,630 @@
+/**
+ * Options Page Styles - стили для страницы настроек
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  background: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* === Header === */
+.header {
+  background: linear-gradient(135deg, #1890ff 0%, #52c41a 100%);
+  color: white;
+  padding: 24px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.logo-text h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.logo-text p {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.version {
+  background: rgba(255,255,255,0.2);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* === Content Layout === */
+.content {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 32px;
+  padding: 32px 24px;
+}
+
+/* === Sidebar Navigation === */
+.sidebar {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  height: fit-content;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border: 1px solid #f0f0f0;
+}
+
+.nav-section {
+  margin-bottom: 32px;
+}
+
+.nav-section:last-child {
+  margin-bottom: 0;
+}
+
+.nav-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #666;
+  letter-spacing: 0.5px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.nav-btn:hover {
+  background: #f0f8ff;
+  color: #1890ff;
+}
+
+.nav-btn.active {
+  background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+  color: white;
+  font-weight: 600;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
+}
+
+.nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+/* === Main Content === */
+.main {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border: 1px solid #f0f0f0;
+}
+
+.section {
+  display: none;
+}
+
+.section.active {
+  display: block;
+}
+
+.section-header {
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.section-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+}
+
+.section-header p {
+  margin: 0;
+  font-size: 16px;
+  color: #666;
+}
+
+/* === Settings Groups === */
+.settings-group {
+  margin-bottom: 40px;
+}
+
+.settings-group:last-child {
+  margin-bottom: 0;
+}
+
+.settings-group h3 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.setting-item {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+}
+
+.setting-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  position: relative;
+}
+
+.setting-label-inline {
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.setting-description {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* === Custom Checkbox === */
+input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  width: 0;
+  height: 0;
+}
+
+.checkmark {
+  width: 20px;
+  height: 20px;
+  background: white;
+  border: 2px solid #d9d9d9;
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.setting-label:hover .checkmark {
+  border-color: #1890ff;
+}
+
+input[type="checkbox"]:checked + .checkmark {
+  background: #1890ff;
+  border-color: #1890ff;
+}
+
+input[type="checkbox"]:checked + .checkmark:after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* === Form Elements === */
+input[type="number"], input[type="color"], select {
+  padding: 8px 12px;
+  border: 2px solid #e8e8e8;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  transition: border-color 0.2s;
+}
+
+input[type="number"]:focus,
+input[type="color"]:focus,
+select:focus {
+  outline: none;
+  border-color: #1890ff;
+}
+
+/* === Buttons === */
+.btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn--primary {
+  background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(24, 144, 255, 0.3);
+}
+
+.btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(24, 144, 255, 0.4);
+}
+
+.btn--secondary {
+  background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(82, 196, 26, 0.3);
+}
+
+.btn--secondary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(82, 196, 26, 0.4);
+}
+
+.btn--outline {
+  background: white;
+  color: #1890ff;
+  border: 2px solid #1890ff;
+}
+
+.btn--outline:hover {
+  background: #1890ff;
+  color: white;
+}
+
+.btn--danger {
+  background: #ff4d4f;
+  color: white;
+}
+
+.btn--danger:hover {
+  background: #ff7875;
+}
+
+.btn--large {
+  padding: 16px 24px;
+  font-size: 16px;
+}
+
+.btn--small {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* === Configs Management === */
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.configs-list {
+  display: grid;
+  gap: 16px;
+}
+
+.config-card {
+  background: white;
+  border: 2px solid #f0f0f0;
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.config-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.1);
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.config-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.config-domain {
+  font-size: 13px;
+  color: #1890ff;
+  font-family: monospace;
+}
+
+.config-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #666;
+}
+
+.stat {
+  background: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.config-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 16px;
+}
+
+.config-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* === Preview Box === */
+.preview-box {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px dashed #e8e8e8;
+}
+
+.preview-element {
+  padding: 12px 16px;
+  background: white;
+  border-radius: 6px;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+/* === Export/Import === */
+.export-options {
+  text-align: center;
+  padding: 32px;
+  background: #f9f9f9;
+  border-radius: 12px;
+  border: 2px dashed #d9d9d9;
+}
+
+.help-text {
+  font-size: 13px;
+  color: #666;
+  margin: 12px 0 0 0;
+}
+
+.import-area {
+  text-align: center;
+  padding: 32px;
+  background: #f0f8ff;
+  border-radius: 12px;
+  border: 2px dashed #1890ff;
+}
+
+.import-progress {
+  margin-top: 20px;
+}
+
+.import-progress.hidden {
+  display: none;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1890ff 0%, #52c41a 100%);
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: #666;
+  text-align: center;
+}
+
+/* === Help Section === */
+.help-content {
+  display: grid;
+  gap: 32px;
+}
+
+.help-section {
+  padding: 24px;
+  background: #fafafa;
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+}
+
+.help-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 24px;
+}
+
+.help-list li {
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.links {
+  display: grid;
+  gap: 12px;
+}
+
+.help-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: white;
+  border: 2px solid #f0f0f0;
+  border-radius: 8px;
+  color: #1890ff;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.help-link:hover {
+  border-color: #1890ff;
+  background: #f0f8ff;
+  transform: translateX(4px);
+}
+
+/* === Status Bar === */
+.statusbar {
+  background: #333;
+  color: white;
+  padding: 12px 0;
+  font-size: 13px;
+}
+
+.statusbar {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+}
+
+.statusbar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* === Loading States === */
+.loading-placeholder {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 16px;
+}
+
+/* === Toast Animations === */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOutRight {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+
+/* === Responsive === */
+@media (max-width: 768px) {
+  .content {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 20px 16px;
+  }
+  
+  .sidebar {
+    order: -1;
+  }
+  
+  .nav-section {
+    margin-bottom: 20px;
+  }
+  
+  .main {
+    padding: 24px;
+  }
+  
+  .header-content {
+    padding: 0 16px;
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+}

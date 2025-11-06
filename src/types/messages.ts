@@ -2,8 +2,8 @@
  * Сообщения между компонентами расширения
  */
 
-import type { ParserConfig, TestResult } from './config';
-import type { GeneratedSelector } from './selector';
+import type { ParserConfig, TestResult, PageType } from './config';
+import type { GeneratedSelector, SelectorConfig } from './selector';
 import type { DataSchema } from './schema';
 
 /**
@@ -16,41 +16,80 @@ export interface BaseMessage {
 }
 
 /**
- * Сообщения от Popup к Content Script
+ * Ответ на сообщение
  */
-export type PopupMessage = 
-  | ActivateExtensionMessage
-  | DeactivateExtensionMessage
-  | GetConfigMessage
-  | SaveConfigMessage;
-
-export interface ActivateExtensionMessage extends BaseMessage {
-  type: 'ACTIVATE_EXTENSION';
-  pageType?: string;
+export interface MessageResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string | undefined;
 }
 
+// === Основные сообщения ===
+
+/**
+ * Активация расширения
+ */
+export interface ActivateExtensionMessage extends BaseMessage {
+  type: 'ACTIVATE_EXTENSION';
+  pageType?: PageType;
+}
+
+/**
+ * Деактивация расширения
+ */
 export interface DeactivateExtensionMessage extends BaseMessage {
   type: 'DEACTIVATE_EXTENSION';
 }
 
-export interface GetConfigMessage extends BaseMessage {
-  type: 'GET_CONFIG';
-}
-
-export interface SaveConfigMessage extends BaseMessage {
-  type: 'SAVE_CONFIG';
-  config: ParserConfig;
+/**
+ * Получение статуса расширения
+ */
+export interface GetStatusMessage extends BaseMessage {
+  type: 'GET_STATUS';
 }
 
 /**
- * Сообщения от Content Script к Sidebar
+ * Ответ со статусом
  */
-export type ContentMessage =
-  | ElementSelectedMessage
-  | ElementHoveredMessage
-  | TestCompleteMessage
-  | ConfigUpdatedMessage;
+export interface StatusResponse {
+  isActive: boolean;
+  hasSidebar: boolean;
+  pageType?: PageType;
+  domain: string;
+  selectingField?: string;
+  fieldsCount: number;
+  selectorsCount: number;
+}
 
+/**
+ * Переключение состояния
+ */
+export interface ToggleActiveMessage extends BaseMessage {
+  type: 'TOGGLE_ACTIVE';
+  pageType?: PageType;
+}
+
+// === Сообщения выбора ===
+
+/**
+ * Начало выбора элемента
+ */
+export interface StartSelectionMessage extends BaseMessage {
+  type: 'START_SELECTION';
+  fieldName: string;
+  fieldType: string;
+}
+
+/**
+ * Остановка выбора
+ */
+export interface StopSelectionMessage extends BaseMessage {
+  type: 'STOP_SELECTION';
+}
+
+/**
+ * Уведомление о выбранном элементе
+ */
 export interface ElementSelectedMessage extends BaseMessage {
   type: 'ELEMENT_SELECTED';
   fieldName: string;
@@ -63,6 +102,9 @@ export interface ElementSelectedMessage extends BaseMessage {
   selector: GeneratedSelector;
 }
 
+/**
+ * Уведомление о наведении на элемент
+ */
 export interface ElementHoveredMessage extends BaseMessage {
   type: 'ELEMENT_HOVERED';
   element: {
@@ -72,46 +114,61 @@ export interface ElementHoveredMessage extends BaseMessage {
   };
 }
 
-export interface TestCompleteMessage extends BaseMessage {
-  type: 'TEST_COMPLETE';
-  results: TestResult[];
+// === Конфигурация ===
+
+/**
+ * Получение конфига
+ */
+export interface GetConfigMessage extends BaseMessage {
+  type: 'GET_CONFIG';
 }
 
-export interface ConfigUpdatedMessage extends BaseMessage {
-  type: 'CONFIG_UPDATED';
+/**
+ * Сохранение конфига
+ */
+export interface SaveConfigMessage extends BaseMessage {
+  type: 'SAVE_CONFIG';
   config: ParserConfig;
 }
 
 /**
- * Сообщения от Sidebar к Content Script
+ * Обновление схемы
  */
-export type SidebarMessage =
-  | StartSelectionMessage
-  | StopSelectionMessage
-  | TestConfigMessage
-  | UpdateSchemaMessage
-  | HighlightElementMessage;
-
-export interface StartSelectionMessage extends BaseMessage {
-  type: 'START_SELECTION';
-  fieldName: string;
-  fieldType: string;
-}
-
-export interface StopSelectionMessage extends BaseMessage {
-  type: 'STOP_SELECTION';
-}
-
-export interface TestConfigMessage extends BaseMessage {
-  type: 'TEST_CONFIG';
-  config: ParserConfig;
-}
-
 export interface UpdateSchemaMessage extends BaseMessage {
   type: 'UPDATE_SCHEMA';
   schema: DataSchema;
 }
 
+/**
+ * Обновление селектора
+ */
+export interface UpdateSelectorMessage extends BaseMessage {
+  type: 'UPDATE_SELECTOR';
+  fieldName: string;
+  selectorConfig: SelectorConfig;
+}
+
+/**
+ * Обновление типа страницы
+ */
+export interface UpdatePageTypeMessage extends BaseMessage {
+  type: 'UPDATE_PAGE_TYPE';
+  pageType: PageType;
+}
+
+// === Тестирование ===
+
+/**
+ * Тестирование конфига
+ */
+export interface TestConfigMessage extends BaseMessage {
+  type: 'TEST_CONFIG';
+  config: ParserConfig;
+}
+
+/**
+ * Подсветка элемента
+ */
 export interface HighlightElementMessage extends BaseMessage {
   type: 'HIGHLIGHT_ELEMENT';
   selector: string;
@@ -143,22 +200,25 @@ export interface GetTempDataMessage extends BaseMessage {
  * Общие типы сообщений
  */
 export type ExtensionMessage = 
-  | PopupMessage 
-  | ContentMessage 
-  | SidebarMessage
+  | ActivateExtensionMessage
+  | DeactivateExtensionMessage
+  | GetStatusMessage
+  | ToggleActiveMessage
+  | StartSelectionMessage
+  | StopSelectionMessage
+  | ElementSelectedMessage
+  | ElementHoveredMessage
+  | GetConfigMessage
+  | SaveConfigMessage
+  | UpdateSchemaMessage
+  | UpdateSelectorMessage
+  | UpdatePageTypeMessage
+  | TestConfigMessage
+  | HighlightElementMessage
   | GetTabInfoMessage
   | UpdateBadgeMessage
   | StoreTempDataMessage
   | GetTempDataMessage;
-
-/**
- * Ответ на сообщение
- */
-export interface MessageResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string | undefined;
-}
 
 /**
  * Обработчик сообщений
@@ -168,7 +228,7 @@ export type MessageHandler<T extends BaseMessage = BaseMessage> = (
 ) => Promise<MessageResponse> | MessageResponse;
 
 /**
- * Создать базовое сообщение с правильной типизацией
+ * Создать базовое сообщение
  */
 export function createBaseMessage<T extends ExtensionMessage['type']>(
   type: T
