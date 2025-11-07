@@ -1,5 +1,5 @@
 /**
- * Config Repository v4.0
+ * Config Repository v4.3
  * @module storage/config-repository
  */
 
@@ -25,12 +25,26 @@ export async function addConfig(config: ParserConfig): Promise<void> {
   const configs = await getAllConfigs();
   const existingIndex = configs.findIndex(c => c.id === config.id);
   
+  // Миграция и валидация
   const validated: ParserConfig = {
     ...config,
     pages: config.pages.map(p => ({
       ...p,
-      commonFields: p.commonFields || p.fields || [],
-      subPages: p.subPages || [],
+      commonFields: (p.commonFields || p.fields || []).map(f => ({
+        ...f,
+        preParseActions: f.preParseActions || [],
+        loadConfig: f.loadConfig || undefined
+      })),
+      subPages: (p.subPages || []).map(sp => ({
+        ...sp,
+        preParseActions: sp.preParseActions || [],
+        fields: sp.fields.map(f => ({
+          ...f,
+          preParseActions: f.preParseActions || [],
+          loadConfig: f.loadConfig || undefined
+        }))
+      })),
+      preParseActions: p.preParseActions || [],
       fields: []
     }))
   };

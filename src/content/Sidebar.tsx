@@ -1,5 +1,5 @@
 /**
- * Sidebar v4.2 - Array Item Types
+ * Sidebar v4.3 - Pre-Parse Actions
  * @module content/Sidebar
  */
 
@@ -14,6 +14,7 @@ import { searchPresets } from '@lib/constants/field-presets';
 import { highlightField, clearFieldPreview, clearAllPreviews, getFieldColor } from '@lib/utils/visual-preview';
 import { CustomObjectTypeBuilder } from '@components/features/CustomObjectTypeBuilder';
 import { ConfigSelector } from '@components/features/ConfigSelector';
+import { PreParseActionsEditor } from '@components/features/PreParseActionsEditor';
 import type { CustomField, FieldType, PageConfig, CustomObjectType, ParserConfig, SubPage, FieldLoadStrategy, ArrayItemType } from '@lib/types/parser.types';
 import type { ElementPickedEvent, ElementPickCancelledEvent } from '@lib/events/parser.events';
 
@@ -31,8 +32,8 @@ const styles = `
   .close { background: rgba(255,255,255,0.2); border: none; color: white; font-size: 28px; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; }
   .content { flex: 1; overflow-y: auto; padding: 20px; }
   .info { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 13px; color: #1e40af; }
-  .section { margin-bottom: 24px; }
-  .section-title { font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .section { margin-bottom: 20px; }
+  .section-title { font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
   .badge { background: #e0e7ff; color: #4338ca; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
   .group { margin-bottom: 12px; position: relative; }
   .label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 4px; }
@@ -50,8 +51,8 @@ const styles = `
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
   .validation { margin-top: 6px; padding: 8px; border-radius: 4px; font-size: 12px; }
   .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; border-left-width: 4px; }
-  .load-config-box { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 10px; margin-top: 10px; }
-  .load-config-title { font-size: 12px; font-weight: 600; color: #78350f; margin-bottom: 8px; cursor: pointer; user-select: none; }
+  .load-config-box { background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; padding: 10px; margin-top: 10px; }
+  .load-config-title { font-size: 12px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px; cursor: pointer; user-select: none; }
   .array-type-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; margin-top: 8px; }
   .page-card { background: #faf5ff; border: 2px solid #e9d5ff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
   .subpage-card { background: #f0f9ff; border: 2px solid #bae6fd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
@@ -122,7 +123,7 @@ function FieldLoadConfigEditor({ field, onChange }: {
   return (
     <div className="load-config-box">
       <div className="load-config-title" onClick={() => setExpanded(!expanded)}>
-        {expanded ? '▼' : '▶'} Load Strategy: {strategy}
+        {expanded ? '▼' : '▶'} Load: {strategy}
       </div>
       
       {expanded && (
@@ -141,35 +142,23 @@ function FieldLoadConfigEditor({ field, onChange }: {
           </select>
 
           {(strategy === 'click-expand' || strategy === 'click-load-more') && (
-            <>
-              <div className="row" style={{ marginBottom: '8px' }}>
-                <input 
-                  className="input"
-                  style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
-                  placeholder="Button selector"
-                  value={field.loadConfig?.buttonSelector || ''}
-                  onChange={(e) => onChange({ 
-                    loadConfig: { ...field.loadConfig!, buttonSelector: e.target.value } 
-                  })}
-                />
-                <button 
-                  className={`btn btn-pick btn-sm ${field.isPickingLoadButton ? 'active' : ''}`}
-                  onClick={handlePickButton}
-                  type="button"
-                >
-                  {field.isPickingLoadButton ? '...' : 'Pick'}
-                </button>
-              </div>
-              <div style={{ fontSize: '10px', color: '#78350f' }}>
-                {strategy === 'click-expand' && '��� Button inside field'}
-                {strategy === 'click-load-more' && '��� Global button'}
-              </div>
-            </>
-          )}
-
-          {strategy === 'infinite-scroll' && (
-            <div style={{ fontSize: '10px', color: '#065f46', background: '#d1fae5', padding: '6px', borderRadius: '4px', marginBottom: '8px' }}>
-              ♾️ Auto-scrolls to last element
+            <div className="row" style={{ marginBottom: '8px' }}>
+              <input 
+                className="input"
+                style={{ flex: 1, fontSize: '12px', padding: '6px 8px' }}
+                placeholder="Button"
+                value={field.loadConfig?.buttonSelector || ''}
+                onChange={(e) => onChange({ 
+                  loadConfig: { ...field.loadConfig!, buttonSelector: e.target.value } 
+                })}
+              />
+              <button 
+                className={`btn btn-pick btn-sm ${field.isPickingLoadButton ? 'active' : ''}`}
+                onClick={handlePickButton}
+                type="button"
+              >
+                {field.isPickingLoadButton ? '...' : 'Pick'}
+              </button>
             </div>
           )}
 
@@ -187,7 +176,7 @@ function FieldLoadConfigEditor({ field, onChange }: {
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '10px', color: '#6b7280' }}>Wait (ms)</label>
+              <label style={{ fontSize: '10px', color: '#6b7280' }}>Wait</label>
               <input 
                 type="number"
                 className="input"
@@ -245,13 +234,12 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
           Name
           {scope === 'common' && <span className="badge" style={{ marginLeft: '8px', background: '#dbeafe' }}>COMMON</span>}
         </label>
-        <input className="input" value={field.name} onChange={(e) => { onChange({ name: e.target.value, key: e.target.value.toLowerCase().replace(/\s+/g, '_') }); setShowPresets(e.target.value.length > 0); }} onFocus={() => setShowPresets(field.name.length > 0)} onBlur={() => setTimeout(() => setShowPresets(false), 200)} placeholder="Type to search..." />
+        <input className="input" value={field.name} onChange={(e) => { onChange({ name: e.target.value, key: e.target.value.toLowerCase().replace(/\s+/g, '_') }); setShowPresets(e.target.value.length > 0); }} onFocus={() => setShowPresets(field.name.length > 0)} onBlur={() => setTimeout(() => setShowPresets(false), 200)} placeholder="Type..." />
         {showPresets && (
           <div className="preset-dropdown">
             {searchPresets(field.name).slice(0, 5).map((p) => (
               <div key={p.key} className="preset-item" onClick={() => { onChange({ name: p.name, key: p.key, type: p.type === 'custom-object' ? 'string' : p.type }); setShowPresets(false); }}>
                 <strong>{p.name}</strong><span className="preset-badge">{p.type}</span>
-                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>{p.description}</div>
               </div>
             ))}
           </div>
@@ -270,10 +258,9 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
         </select>
       </div>
 
-      {/* Array Item Type */}
       {field.type === 'array' && (
         <div className="array-type-box">
-          <label className="label" style={{ fontSize: '12px' }}>Array Item Type</label>
+          <label className="label" style={{ fontSize: '12px' }}>Item Type</label>
           <select 
             className="select" 
             value={field.arrayItemType || 'string'} 
@@ -281,19 +268,19 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
           >
             <option value="string">String</option>
             <option value="number">Number</option>
-            <option value="image">Image URL</option>
+            <option value="image">Image</option>
             <option value="url">URL</option>
-            {page.customObjectTypes.length > 0 && <option value="custom-object">Custom Object</option>}
+            {page.customObjectTypes.length > 0 && <option value="custom-object">Object</option>}
           </select>
           
           {field.arrayItemType === 'custom-object' && page.customObjectTypes.length > 0 && (
             <select 
               className="select" 
-              style={{ marginTop: '8px' }}
+              style={{ marginTop: '6px' }}
               value={field.customObjectTypeId || ''} 
               onChange={(e) => onChange({ customObjectTypeId: e.target.value })}
             >
-              <option value="">Select object type...</option>
+              <option value="">Select...</option>
               {page.customObjectTypes.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
@@ -302,7 +289,6 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
         </div>
       )}
 
-      {/* Single Custom Object Type */}
       {field.type === 'custom-object' && (
         <div className="group">
           <label className="label">Object Type</label>
@@ -312,14 +298,14 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
               value={field.customObjectTypeId || ''} 
               onChange={(e) => onChange({ customObjectTypeId: e.target.value })}
             >
-              <option value="">Select type...</option>
+              <option value="">Select...</option>
               {page.customObjectTypes.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
           ) : (
-            <div style={{ fontSize: '12px', color: '#ef4444', padding: '8px', background: '#fee2e2', borderRadius: '4px' }}>
-              No object types. Create one first!
+            <div style={{ fontSize: '12px', color: '#ef4444', padding: '6px', background: '#fee2e2', borderRadius: '4px' }}>
+              Create object type first!
             </div>
           )}
         </div>
@@ -330,7 +316,7 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
         <div className="row">
           <input className="input" value={field.selector} onChange={(e) => onChange({ selector: e.target.value })} style={{ flex: 1 }} />
           <button className={`btn btn-pick ${field.isPicking ? 'active' : ''}`} onClick={onPick} type="button">
-            {field.isPicking ? 'Pick...' : 'Pick'}
+            {field.isPicking ? '...' : 'Pick'}
           </button>
           {field.selector && (
             <button 
@@ -346,12 +332,18 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
         </div>
         {field.validation && (
           <div className="validation" style={{ background: `${fieldColor}15`, border: `1px solid ${fieldColor}` }}>
-            {field.isHighlighted ? 'Highlighted' : 'Found'}: {field.validation.count} element(s)
+            {field.validation.count} element(s)
           </div>
         )}
       </div>
 
       <FieldLoadConfigEditor field={field} onChange={onChange} />
+      
+      <PreParseActionsEditor 
+        actions={field.preParseActions || []} 
+        onChange={(actions) => onChange({ preParseActions: actions })}
+        level="field"
+      />
     </div>
   );
 }
@@ -387,8 +379,8 @@ function SubPageEditor({ subPage, totalFieldsBefore, page, onChange, onDelete }:
             />
           </div>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>URL Pattern</label>
+          <div style={{ marginBottom: '10px' }}>
+            <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>URL</label>
             <input 
               style={{ width: '100%', padding: '6px 8px', border: '1px solid #bae6fd', borderRadius: '6px', fontSize: '13px' }}
               value={subPage.urlPattern} 
@@ -397,7 +389,13 @@ function SubPageEditor({ subPage, totalFieldsBefore, page, onChange, onDelete }:
             />
           </div>
 
-          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#0c4a6e' }}>
+          <PreParseActionsEditor 
+            actions={subPage.preParseActions || []} 
+            onChange={(actions) => onChange({ preParseActions: actions })}
+            level="subpage"
+          />
+
+          <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '12px', marginBottom: '8px', color: '#0c4a6e' }}>
             Fields ({subPage.fields.length})
           </div>
 
@@ -463,12 +461,12 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
     <div className="page-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <input className="input" value={page.name} onChange={(e) => onChange({ name: e.target.value })} style={{ background: 'transparent', border: 'none', fontSize: '16px', fontWeight: 600, color: '#6b21a8', padding: 0, flex: 1 }} />
-        <button style={{ background: '#dc2626', color: 'white', padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }} onClick={onDelete} type="button">Delete</button>
+        <button style={{ background: '#dc2626', color: 'white', padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }} onClick={onDelete} type="button">×</button>
       </div>
 
       {highlightedCount > 0 && (
         <div className="preview-toolbar">
-          <span style={{ fontSize: '13px', fontWeight: 500 }}>{highlightedCount} highlighted</span>
+          <span style={{ fontSize: '13px', fontWeight: 500 }}>{highlightedCount}</span>
           <button style={{ background: '#f59e0b', color: 'white', padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }} onClick={() => {
             clearAllPreviews();
             onChange({ 
@@ -480,32 +478,38 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
       )}
 
       <div className="group">
-        <label className="label">URL Pattern</label>
-        <input className="input" value={page.urlPattern} onChange={(e) => onChange({ urlPattern: e.target.value })} />
+        <label className="label">URL</label>
+        <input className="input" value={page.urlPattern} onChange={(e) => onChange({ urlPattern: e.target.value })} style={{ fontSize: '13px' }} />
         <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-          {matchesPattern(currentUrl, page.urlPattern) ? '✅ Match' : '❌ No'}
+          {matchesPattern(currentUrl, page.urlPattern) ? '✅' : '❌'}
         </div>
-        {!showSugg && <button className="btn btn-pick" onClick={() => setShowSugg(true)} type="button" style={{ marginTop: '8px', width: '100%', height: 'auto', padding: '6px', fontSize: '12px' }}>Suggest</button>}
+        {!showSugg && <button className="btn btn-pick" onClick={() => setShowSugg(true)} type="button" style={{ marginTop: '6px', width: '100%', padding: '6px', fontSize: '12px' }}>Suggest</button>}
         {showSugg && (
-          <div style={{ background: '#fef3c7', padding: '8px', marginTop: '8px', borderRadius: '6px' }}>
-            {suggestPatterns(currentUrl).map((p, i) => <button key={i} onClick={() => { onChange({ urlPattern: p }); setShowSugg(false); }} type="button" style={{ display: 'block', width: '100%', padding: '4px', margin: '4px 0', background: 'white', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', textAlign: 'left' }}><code>{p}</code></button>)}
+          <div style={{ background: '#fef3c7', padding: '8px', marginTop: '6px', borderRadius: '6px' }}>
+            {suggestPatterns(currentUrl).map((p, i) => <button key={i} onClick={() => { onChange({ urlPattern: p }); setShowSugg(false); }} type="button" style={{ display: 'block', width: '100%', padding: '4px', margin: '3px 0', background: 'white', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', textAlign: 'left' }}><code>{p}</code></button>)}
           </div>
         )}
       </div>
 
       <div className="group">
-        <label className="label">Tab Selector (optional)</label>
+        <label className="label">Tab Selector</label>
         <input 
           className="input" 
-          placeholder="For tabs: .tabs-tab" 
+          placeholder=".tabs-tab" 
           value={page.tabSelector || ''} 
           onChange={(e) => onChange({ tabSelector: e.target.value })}
           style={{ fontSize: '13px' }}
         />
       </div>
 
-      <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '6px', padding: '10px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>Object Types ({page.customObjectTypes.length})</div>
+      <PreParseActionsEditor 
+        actions={page.preParseActions || []} 
+        onChange={(actions) => onChange({ preParseActions: actions })}
+        level="page"
+      />
+
+      <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '6px', padding: '10px', marginBottom: '12px', marginTop: '12px' }}>
+        <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>Types ({page.customObjectTypes.length})</div>
         {page.customObjectTypes.map((t) => (
           <div key={t.id} className="object-type-item">
             <div>
@@ -515,12 +519,12 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
             <button className="btn-icon" onClick={() => onChange({ customObjectTypes: page.customObjectTypes.filter(ot => ot.id !== t.id) })} type="button">×</button>
           </div>
         ))}
-        <button className="btn btn-add" onClick={() => setEditingObjType(true)} type="button" style={{ fontSize: '12px' }}>+ Type</button>
+        <button className="btn btn-add" onClick={() => setEditingObjType(true)} type="button" style={{ fontSize: '12px', padding: '8px' }}>+ Type</button>
       </div>
 
       <div className="section">
         <div className="section-title">
-          Common Fields <span className="badge">{page.commonFields.length}</span>
+          Common <span className="badge">{page.commonFields.length}</span>
         </div>
         {page.commonFields.map((f, idx) => (
           <DynamicField 
@@ -611,8 +615,8 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
   };
 
   const handleDeletePage = () => {
-    if (pages.length === 1) { alert('Last page!'); return; }
-    if (!confirm(`Delete?`)) return;
+    if (pages.length === 1) { alert('Last!'); return; }
+    if (!confirm('Delete?')) return;
     clearAllPreviews();
     setPages(prev => prev.filter((_, i) => i !== currentTab));
     setCurrentTab(Math.max(0, currentTab - 1));
@@ -697,28 +701,30 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
   }, [pages]);
 
   const handleSave = async () => {
-    if (!name) { alert('Enter name'); return; }
+    if (!name) { alert('Name!'); return; }
     clearAllPreviews();
     
     const config = { 
       id: existingConfig?.id || crypto.randomUUID(), 
       name, 
-      version: '4.2.0', 
+      version: '4.3.0', 
       targetUrl, 
-      pages: pages.map(({ id, name, urlPattern, tabSelector, commonFields, subPages, customObjectTypes }) => ({ 
+      pages: pages.map(({ id, name, urlPattern, tabSelector, preParseActions, commonFields, subPages, customObjectTypes }) => ({ 
         id, 
         name, 
         urlPattern,
         tabSelector,
-        commonFields: commonFields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig }) => 
-          ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig })
+        preParseActions,
+        commonFields: commonFields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions }) => 
+          ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions })
         ),
-        subPages: subPages.map(({ id, name, urlPattern, fields }) => ({
+        subPages: subPages.map(({ id, name, urlPattern, fields, preParseActions }) => ({
           id,
           name,
           urlPattern,
-          fields: fields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig }) => 
-            ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig })
+          preParseActions,
+          fields: fields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions }) => 
+            ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions })
           )
         })),
         customObjectTypes,
@@ -751,9 +757,9 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
         
         <div className="content">
           {pages.some(p => p.commonFields.some(f => f.isPicking || f.isPickingLoadButton) || p.subPages.some(sp => sp.fields.some(f => f.isPicking || f.isPickingLoadButton))) && (
-            <div className="picking-hint">Click element (ESC = cancel)</div>
+            <div className="picking-hint">Click (ESC = cancel)</div>
           )}
-          <div className="info"><strong>v4.2:</strong> Array item types!</div>
+          <div className="info"><strong>v4.3:</strong> Pre-Parse Actions!</div>
           <div className="group"><label className="label">Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div style={{ marginTop: '16px' }}>
             <div className="tabs">

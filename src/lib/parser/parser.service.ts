@@ -1,10 +1,11 @@
 /**
- * Parser Service v4.1 - Field-Level Loading
+ * Parser Service v4.3 - Pre-Parse Actions
  * @module parser.service
  */
 
 import { matchesPattern } from '@lib/utils/url-pattern-matcher';
 import { generateSmartSelector } from '@lib/utils/smart-selector-generator';
+import { domProtectionService } from './dom-protection.service';
 import type { ParserConfig, PageConfig, SubPage, ParsedPageData, CustomField } from '../types/parser.types';
 
 export class ParserService {
@@ -22,19 +23,37 @@ export class ParserService {
   }
 
   async parsePage(pageConfig: PageConfig, subPage: SubPage | undefined, document: Document): Promise<ParsedPageData> {
+    // 1. Выполняем Pre-Parse Actions страницы
+    if (pageConfig.preParseActions) {
+      await domProtectionService.executeActions(pageConfig.preParseActions);
+    }
+    
+    // 2. Выполняем Pre-Parse Actions подстраницы
+    if (subPage?.preParseActions) {
+      await domProtectionService.executeActions(subPage.preParseActions);
+    }
+    
+    // 3. Создаем snapshot если включен
+    const parseDoc = pageConfig.snapshotConfig?.enabled 
+      ? domProtectionService.createSnapshot() 
+      : document;
+    
     const data: Record<string, unknown> = {};
     
-    // Парсим Common Fields с их load strategies
+    // 4. Парсим Common Fields
     for (const field of pageConfig.commonFields) {
-      data[field.key] = await this.extractFieldWithLoading(document, field);
+      data[field.key] = await this.extractFieldWithLoading(parseDoc, field);
     }
     
-    // Парсим SubPage Fields если есть
+    // 5. Парсим SubPage Fields
     if (subPage) {
       for (const field of subPage.fields) {
-        data[field.key] = await this.extractFieldWithLoading(document, field);
+        data[field.key] = await this.extractFieldWithLoading(parseDoc, field);
       }
     }
+    
+    // 6. Восстанавливаем состояние
+    domProtectionService.restore();
     
     return { 
       pageType: subPage ? `${pageConfig.name} - ${subPage.name}` : pageConfig.name, 
@@ -82,7 +101,7 @@ export class ParserService {
       const elements = document.querySelectorAll(selector);
       
       if (elements.length === 0) {
-        return { isValid: false, elementCount: 0, error: 'No elements found' };
+        return { isValid: false, elementCount: 0, error: 'No elements' };
       }
 
       if (type === 'array' || type === 'custom-object') {
@@ -95,34 +114,61 @@ export class ParserService {
 
       return { isValid: true, elementCount: elements.length, previewText };
     } catch (error) {
-      return { isValid: false, elementCount: 0, error: error instanceof Error ? error.message : 'Invalid selector' };
+      return { isValid: false, elementCount: 0, error: error instanceof Error ? error.message : 'Invalid' };
     }
   }
 
   /**
-   * Извлекает поле с применением его Load Strategy
+   * Извлекает поле с Pre-Parse Actions и Load Strategy
    */
   private async extractFieldWithLoading(document: Document, field: CustomField): Promise<unknown> {
-    // Применяем Load Strategy поля если есть
+    // 1. Выполняем Pre-Parse Actions поля
+    if (field.preParseActions) {
+      await domProtectionService.executeActions(field.preParseActions);
+    }
+    
+    // 2. Применяем Load Strategy
     if (field.loadConfig && field.loadConfig.strategy !== 'none') {
       await this.applyFieldLoadStrategy(document, field);
     }
 
-    // Извлекаем данные
-    const { type, selector } = field;
+    // 3. Извлекаем данные
+    const { type, selector, arrayItemType } = field;
+    
     switch (type) {
-      case 'string': return document.querySelector(selector)?.textContent?.trim() || '';
-      case 'array': return Array.from(document.querySelectorAll(selector)).map(el => el.textContent?.trim() || '');
+      case 'string': 
+        return document.querySelector(selector)?.textContent?.trim() || '';
+        
+      case 'array': {
+        const elements = Array.from(document.querySelectorAll(selector));
+        
+        switch (arrayItemType) {
+          case 'number':
+            return elements.map(el => parseFloat(el.textContent?.trim().replace(/[^0-9.]/g, '') || '0'));
+          case 'image':
+            return elements.map(el => el.getAttribute('src') || '');
+          case 'url':
+            return elements.map(el => el.getAttribute('href') || '');
+          case 'custom-object':
+            // TODO: парсинг custom objects
+            return elements.map(el => ({ raw: el.textContent?.trim() }));
+          default:
+            return elements.map(el => el.textContent?.trim() || '');
+        }
+      }
+        
       case 'image':
-      case 'url': return document.querySelector(selector)?.getAttribute(type === 'image' ? 'src' : 'href') || '';
-      case 'number': return parseFloat(document.querySelector(selector)?.textContent?.trim().replace(/[^0-9.]/g, '') || '0');
-      default: return '';
+      case 'url': 
+        return document.querySelector(selector)?.getAttribute(type === 'image' ? 'src' : 'href') || '';
+        
+      case 'number': 
+        return parseFloat(document.querySelector(selector)?.textContent?.trim().replace(/[^0-9.]/g, '') || '0');
+        
+      default: 
+        return '';
     }
   }
 
-  /**
-   * Применяет Load Strategy к полю
-   */
   private async applyFieldLoadStrategy(document: Document, field: CustomField): Promise<void> {
     if (!field.loadConfig) return;
 
@@ -133,7 +179,6 @@ export class ParserService {
         break;
 
       case 'click-expand':
-        // Ищем кнопку внутри родительского элемента поля
         if (buttonSelector) {
           const parentElement = document.querySelector(field.selector);
           if (parentElement) {
@@ -147,7 +192,6 @@ export class ParserService {
         break;
 
       case 'infinite-scroll':
-        // Скроллим к последнему элементу массива
         for (let i = 0; i < maxIterations; i++) {
           const items = document.querySelectorAll(field.selector);
           if (items.length === 0) break;
@@ -168,7 +212,6 @@ export class ParserService {
         break;
 
       case 'click-load-more':
-        // Кликаем глобальную кнопку Load More
         if (buttonSelector) {
           for (let i = 0; i < maxIterations; i++) {
             const button = document.querySelector(buttonSelector) as HTMLElement;
@@ -187,7 +230,6 @@ export class ParserService {
         break;
 
       case 'hover-expand':
-        // Наведение на элемент
         if (buttonSelector) {
           const element = document.querySelector(buttonSelector) as HTMLElement;
           if (element) {
@@ -198,6 +240,17 @@ export class ParserService {
         break;
     }
   }
+
+  // private waitForElement(selector: string, timeout: number): Promise<void> {
+  //   return new Promise((resolve, reject) => {
+  //     if (document.querySelector(selector)) { resolve(); return; }
+  //     const observer = new MutationObserver(() => {
+  //       if (document.querySelector(selector)) { observer.disconnect(); resolve(); }
+  //     });
+  //     observer.observe(document.body, { childList: true, subtree: true });
+  //     setTimeout(() => { observer.disconnect(); reject(new Error(`Timeout: ${selector}`)); }, timeout);
+  //   });
+  // }
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

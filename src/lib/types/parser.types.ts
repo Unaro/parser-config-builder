@@ -1,5 +1,5 @@
 /**
- * Parser Types v4.2 - Array Item Types
+ * Parser Types v4.3 - Pre-Parse Actions & DOM Snapshot
  * @module types/parser.types
  */
 
@@ -12,6 +12,25 @@ export type FieldLoadStrategy =
   | 'infinite-scroll'
   | 'click-load-more'
   | 'hover-expand';
+
+/**
+ * Действия перед парсингом для подготовки страницы
+ */
+export type PreParseActionType = 
+  | 'disable-interactions'   // Отключить все onclick/hover события
+  | 'remove-overlays'        // Удалить модальные окна, popups
+  | 'expand-all'             // Раскрыть все collapsible элементы
+  | 'trigger-hover'          // Триггерить hover на элементах
+  | 'wait-for-element'       // Ждать появления элемента
+  | 'remove-elements'        // Удалить мешающие элементы
+  | 'force-visible';         // Сделать скрытые элементы видимыми
+
+export interface PreParseAction {
+  type: PreParseActionType;
+  selector?: string;          // Для trigger-hover, remove-elements, wait-for-element
+  timeout?: number;           // Для wait-for-element
+  executeOnce?: boolean;      // Выполнить только один раз при первом парсинге
+}
 
 export interface FieldTransform {
   type: 'regex' | 'split' | 'slice' | 'replace';
@@ -29,6 +48,16 @@ export interface FieldLoadConfig {
   stopWhenNoChange?: boolean;
 }
 
+/**
+ * Snapshot настройки для сохранения состояния DOM
+ */
+export interface DOMSnapshotConfig {
+  enabled: boolean;              // Включить snapshot перед парсингом
+  captureSelector?: string;      // Захватить только определенную часть DOM
+  removeInteractive?: boolean;   // Удалить интерактивные обработчики
+  freezeAnimations?: boolean;    // Заморозить анимации
+}
+
 export interface CustomField {
   id: string;
   name: string;
@@ -39,13 +68,12 @@ export interface CustomField {
   description?: string;
   transform?: FieldTransform;
   
-  // Для type: 'array'
   arrayItemType?: ArrayItemType;
-  
-  // Для arrayItemType: 'custom-object' или type: 'custom-object'
   customObjectTypeId?: string;
-  
   loadConfig?: FieldLoadConfig;
+  
+  // Pre-parse actions для этого поля
+  preParseActions?: PreParseAction[];
 }
 
 export interface ObjectFieldDefinition {
@@ -69,6 +97,9 @@ export interface SubPage {
   name: string;
   urlPattern: string;
   fields: CustomField[];
+  
+  // Pre-parse actions для всей подстраницы
+  preParseActions?: PreParseAction[];
 }
 
 export interface PageConfig {
@@ -76,9 +107,17 @@ export interface PageConfig {
   name: string;
   urlPattern: string;
   tabSelector?: string;
+  
   commonFields: readonly CustomField[];
   subPages?: readonly SubPage[];
   customObjectTypes: readonly CustomObjectType[];
+  
+  // Pre-parse actions для всей страницы (выполняются первыми)
+  preParseActions?: PreParseAction[];
+  
+  // DOM Snapshot настройки
+  snapshotConfig?: DOMSnapshotConfig;
+  
   fields: readonly CustomField[];
   loadStrategy?: any;
 }
