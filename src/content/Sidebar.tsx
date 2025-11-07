@@ -1,5 +1,5 @@
 /**
- * Sidebar v4.1 - Field-Level Load Strategy
+ * Sidebar v4.2 - Array Item Types
  * @module content/Sidebar
  */
 
@@ -14,7 +14,7 @@ import { searchPresets } from '@lib/constants/field-presets';
 import { highlightField, clearFieldPreview, clearAllPreviews, getFieldColor } from '@lib/utils/visual-preview';
 import { CustomObjectTypeBuilder } from '@components/features/CustomObjectTypeBuilder';
 import { ConfigSelector } from '@components/features/ConfigSelector';
-import type { CustomField, FieldType, PageConfig, CustomObjectType, ParserConfig, SubPage, FieldLoadStrategy } from '@lib/types/parser.types';
+import type { CustomField, FieldType, PageConfig, CustomObjectType, ParserConfig, SubPage, FieldLoadStrategy, ArrayItemType } from '@lib/types/parser.types';
 import type { ElementPickedEvent, ElementPickCancelledEvent } from '@lib/events/parser.events';
 
 interface SidebarProps {
@@ -52,6 +52,7 @@ const styles = `
   .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; border-left-width: 4px; }
   .load-config-box { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 10px; margin-top: 10px; }
   .load-config-title { font-size: 12px; font-weight: 600; color: #78350f; margin-bottom: 8px; cursor: pointer; user-select: none; }
+  .array-type-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; margin-top: 8px; }
   .page-card { background: #faf5ff; border: 2px solid #e9d5ff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
   .subpage-card { background: #f0f9ff; border: 2px solid #bae6fd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid #e5e7eb; overflow-x: auto; }
@@ -96,7 +97,6 @@ function FieldLoadConfigEditor({ field, onChange }: {
   onChange: (u: Partial<FieldState>) => void;
 }) {
   const [expanded, setExpanded] = useState(!!field.loadConfig && field.loadConfig.strategy !== 'none');
-
   const strategy = field.loadConfig?.strategy || 'none';
 
   const handleStrategyChange = (newStrategy: FieldLoadStrategy) => {
@@ -133,11 +133,11 @@ function FieldLoadConfigEditor({ field, onChange }: {
             onChange={(e) => handleStrategyChange(e.target.value as FieldLoadStrategy)}
             style={{ marginBottom: '8px' }}
           >
-            <option value="none">None - Static</option>
-            <option value="click-expand">Click Expand (button inside field)</option>
-            <option value="infinite-scroll">Infinite Scroll (auto-scroll to last)</option>
-            <option value="click-load-more">Click Load More (global button)</option>
-            <option value="hover-expand">Hover Expand</option>
+            <option value="none">None</option>
+            <option value="click-expand">Click Expand</option>
+            <option value="infinite-scroll">Infinite Scroll</option>
+            <option value="click-load-more">Click Load More</option>
+            <option value="hover-expand">Hover</option>
           </select>
 
           {(strategy === 'click-expand' || strategy === 'click-load-more') && (
@@ -157,25 +157,25 @@ function FieldLoadConfigEditor({ field, onChange }: {
                   onClick={handlePickButton}
                   type="button"
                 >
-                  {field.isPickingLoadButton ? 'Pick...' : 'Pick'}
+                  {field.isPickingLoadButton ? '...' : 'Pick'}
                 </button>
               </div>
-              <div style={{ fontSize: '10px', color: '#78350f', marginBottom: '8px' }}>
-                {strategy === 'click-expand' && 'Button inside field element (e.g., .link, .show-more)'}
-                {strategy === 'click-load-more' && 'Global button (e.g., .load-more-btn)'}
+              <div style={{ fontSize: '10px', color: '#78350f' }}>
+                {strategy === 'click-expand' && 'Ì¥ç Button inside field'}
+                {strategy === 'click-load-more' && 'Ìºê Global button'}
               </div>
             </>
           )}
 
           {strategy === 'infinite-scroll' && (
-            <div style={{ fontSize: '10px', color: '#065f46', background: '#d1fae5', padding: '6px 8px', borderRadius: '4px', marginBottom: '8px' }}>
-              Auto: scrolls to last array element until no new items
+            <div style={{ fontSize: '10px', color: '#065f46', background: '#d1fae5', padding: '6px', borderRadius: '4px', marginBottom: '8px' }}>
+              ‚ôæÔ∏è Auto-scrolls to last element
             </div>
           )}
 
-          <div className="row" style={{ fontSize: '12px' }}>
+          <div className="row" style={{ fontSize: '12px', marginTop: '8px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '10px', color: '#6b7280' }}>Max Iterations</label>
+              <label style={{ fontSize: '10px', color: '#6b7280' }}>Max</label>
               <input 
                 type="number"
                 className="input"
@@ -205,9 +205,10 @@ function FieldLoadConfigEditor({ field, onChange }: {
   );
 }
 
-function DynamicField({ field, fieldIndex, onChange, onRemove, onPick, scope }: {
+function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, scope }: {
   field: FieldState;
   fieldIndex: number;
+  page: PageState;
   onChange: (u: Partial<FieldState>) => void;
   onRemove: () => void;
   onPick: () => void;
@@ -256,6 +257,7 @@ function DynamicField({ field, fieldIndex, onChange, onRemove, onPick, scope }: 
           </div>
         )}
       </div>
+
       <div className="group">
         <label className="label">Type</label>
         <select className="select" value={field.type} onChange={(e) => onChange({ type: e.target.value as FieldType })}>
@@ -264,8 +266,65 @@ function DynamicField({ field, fieldIndex, onChange, onRemove, onPick, scope }: 
           <option value="image">Image</option>
           <option value="url">URL</option>
           <option value="number">Number</option>
+          <option value="custom-object">Custom Object</option>
         </select>
       </div>
+
+      {/* Array Item Type */}
+      {field.type === 'array' && (
+        <div className="array-type-box">
+          <label className="label" style={{ fontSize: '12px' }}>Array Item Type</label>
+          <select 
+            className="select" 
+            value={field.arrayItemType || 'string'} 
+            onChange={(e) => onChange({ arrayItemType: e.target.value as ArrayItemType })}
+          >
+            <option value="string">String</option>
+            <option value="number">Number</option>
+            <option value="image">Image URL</option>
+            <option value="url">URL</option>
+            {page.customObjectTypes.length > 0 && <option value="custom-object">Custom Object</option>}
+          </select>
+          
+          {field.arrayItemType === 'custom-object' && page.customObjectTypes.length > 0 && (
+            <select 
+              className="select" 
+              style={{ marginTop: '8px' }}
+              value={field.customObjectTypeId || ''} 
+              onChange={(e) => onChange({ customObjectTypeId: e.target.value })}
+            >
+              <option value="">Select object type...</option>
+              {page.customObjectTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Single Custom Object Type */}
+      {field.type === 'custom-object' && (
+        <div className="group">
+          <label className="label">Object Type</label>
+          {page.customObjectTypes.length > 0 ? (
+            <select 
+              className="select" 
+              value={field.customObjectTypeId || ''} 
+              onChange={(e) => onChange({ customObjectTypeId: e.target.value })}
+            >
+              <option value="">Select type...</option>
+              {page.customObjectTypes.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          ) : (
+            <div style={{ fontSize: '12px', color: '#ef4444', padding: '8px', background: '#fee2e2', borderRadius: '4px' }}>
+              No object types. Create one first!
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="group">
         <label className="label">Selector</label>
         <div className="row">
@@ -297,9 +356,10 @@ function DynamicField({ field, fieldIndex, onChange, onRemove, onPick, scope }: 
   );
 }
 
-function SubPageEditor({ subPage, totalFieldsBefore, onChange, onDelete }: {
+function SubPageEditor({ subPage, totalFieldsBefore, page, onChange, onDelete }: {
   subPage: SubPageState;
   totalFieldsBefore: number;
+  page: PageState;
   onChange: (u: Partial<SubPageState>) => void;
   onDelete: () => void;
 }) {
@@ -327,7 +387,7 @@ function SubPageEditor({ subPage, totalFieldsBefore, onChange, onDelete }: {
             />
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
+          <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>URL Pattern</label>
             <input 
               style={{ width: '100%', padding: '6px 8px', border: '1px solid #bae6fd', borderRadius: '6px', fontSize: '13px' }}
@@ -337,15 +397,16 @@ function SubPageEditor({ subPage, totalFieldsBefore, onChange, onDelete }: {
             />
           </div>
 
-          <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '12px', marginBottom: '8px', color: '#0c4a6e' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#0c4a6e' }}>
             Fields ({subPage.fields.length})
           </div>
 
           {subPage.fields.map((field, idx) => (
             <DynamicField 
               key={field.id} 
-              field={field} 
+              field={field}
               fieldIndex={totalFieldsBefore + idx}
+              page={page}
               onChange={(u) => onChange({ fields: subPage.fields.map(f => f.id === field.id ? { ...f, ...u } : f) })}
               onRemove={() => {
                 if (field.isHighlighted) clearFieldPreview(field.id);
@@ -376,7 +437,7 @@ function SubPageEditor({ subPage, totalFieldsBefore, onChange, onDelete }: {
             })}
             type="button"
           >
-            + Add Field
+            + Field
           </button>
         </>
       )}
@@ -422,9 +483,9 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
         <label className="label">URL Pattern</label>
         <input className="input" value={page.urlPattern} onChange={(e) => onChange({ urlPattern: e.target.value })} />
         <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-          {matchesPattern(currentUrl, page.urlPattern) ? '‚úÖ Matches' : '‚ùå No match'}
+          {matchesPattern(currentUrl, page.urlPattern) ? '‚úÖ Match' : '‚ùå No'}
         </div>
-        {!showSugg && <button className="btn btn-pick" onClick={() => setShowSugg(true)} type="button" style={{ marginTop: '8px', width: '100%', height: 'auto', padding: '6px', fontSize: '12px' }}>Suggestions</button>}
+        {!showSugg && <button className="btn btn-pick" onClick={() => setShowSugg(true)} type="button" style={{ marginTop: '8px', width: '100%', height: 'auto', padding: '6px', fontSize: '12px' }}>Suggest</button>}
         {showSugg && (
           <div style={{ background: '#fef3c7', padding: '8px', marginTop: '8px', borderRadius: '6px' }}>
             {suggestPatterns(currentUrl).map((p, i) => <button key={i} onClick={() => { onChange({ urlPattern: p }); setShowSugg(false); }} type="button" style={{ display: 'block', width: '100%', padding: '4px', margin: '4px 0', background: 'white', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', textAlign: 'left' }}><code>{p}</code></button>)}
@@ -436,14 +497,11 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
         <label className="label">Tab Selector (optional)</label>
         <input 
           className="input" 
-          placeholder="For multi-tab pages: .tabs-tab" 
+          placeholder="For tabs: .tabs-tab" 
           value={page.tabSelector || ''} 
           onChange={(e) => onChange({ tabSelector: e.target.value })}
           style={{ fontSize: '13px' }}
         />
-        <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
-          Parser will click each tab and parse SubPage fields
-        </div>
       </div>
 
       <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '6px', padding: '10px', marginBottom: '16px' }}>
@@ -467,8 +525,9 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
         {page.commonFields.map((f, idx) => (
           <DynamicField 
             key={f.id} 
-            field={f} 
+            field={f}
             fieldIndex={idx}
+            page={page}
             onChange={(u) => onChange({ commonFields: page.commonFields.map(field => field.id === f.id ? { ...field, ...u } : field) })} 
             onRemove={() => { 
               if (f.isHighlighted) clearFieldPreview(f.id); 
@@ -493,6 +552,7 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
             key={sp.id}
             subPage={sp}
             totalFieldsBefore={totalCommonFields + page.subPages.slice(0, spIdx).reduce((acc, s) => acc + s.fields.length, 0)}
+            page={page}
             onChange={(u) => onChange({ subPages: page.subPages.map(s => s.id === sp.id ? { ...s, ...u } : s) })}
             onDelete={() => {
               sp.fields.forEach(f => { if (f.isHighlighted) clearFieldPreview(f.id); });
@@ -503,7 +563,7 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
         <button className="btn btn-add" onClick={() => onChange({ 
           subPages: [...page.subPages, { 
             id: crypto.randomUUID(), 
-            name: 'New SubPage', 
+            name: 'SubPage', 
             urlPattern: '/new', 
             fields: []
           }] 
@@ -551,7 +611,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
   };
 
   const handleDeletePage = () => {
-    if (pages.length === 1) { alert('Cannot delete last page'); return; }
+    if (pages.length === 1) { alert('Last page!'); return; }
     if (!confirm(`Delete?`)) return;
     clearAllPreviews();
     setPages(prev => prev.filter((_, i) => i !== currentTab));
@@ -585,8 +645,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
             ...f, 
             selector: e.data.selector, 
             isPicking: false, 
-            validation: { status: 'valid', count: e.data.elementCount, arrayPreview: e.data.arrayPreview },
-            isHighlighted: false
+            validation: { status: 'valid', count: e.data.elementCount, arrayPreview: e.data.arrayPreview }
           } : f),
           subPages: p.subPages.map(sp => ({
             ...sp,
@@ -594,8 +653,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
               ...f,
               selector: e.data.selector,
               isPicking: false,
-              validation: { status: 'valid', count: e.data.elementCount, arrayPreview: e.data.arrayPreview },
-              isHighlighted: false
+              validation: { status: 'valid', count: e.data.elementCount, arrayPreview: e.data.arrayPreview }
             } : f)
           }))
         })));
@@ -645,22 +703,22 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
     const config = { 
       id: existingConfig?.id || crypto.randomUUID(), 
       name, 
-      version: '4.1.0', 
+      version: '4.2.0', 
       targetUrl, 
       pages: pages.map(({ id, name, urlPattern, tabSelector, commonFields, subPages, customObjectTypes }) => ({ 
         id, 
         name, 
         urlPattern,
         tabSelector,
-        commonFields: commonFields.map(({ id, name, key, type, selector, required, loadConfig }) => 
-          ({ id, name, key, type, selector, required, loadConfig })
+        commonFields: commonFields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig }) => 
+          ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig })
         ),
         subPages: subPages.map(({ id, name, urlPattern, fields }) => ({
           id,
           name,
           urlPattern,
-          fields: fields.map(({ id, name, key, type, selector, required, loadConfig }) => 
-            ({ id, name, key, type, selector, required, loadConfig })
+          fields: fields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig }) => 
+            ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig })
           )
         })),
         customObjectTypes,
@@ -687,7 +745,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
       <style>{styles}</style>
       <div className={`sidebar ${!isVisible ? 'hidden' : ''}`}>
         <div className="header">
-          <h2 className="title">{existingConfig ? 'Edit' : 'Create'}</h2>
+          <h2 className="title">{existingConfig ? 'Edit' : 'New'}</h2>
           <button className="close" onClick={handleClose} type="button">√ó</button>
         </div>
         
@@ -695,7 +753,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
           {pages.some(p => p.commonFields.some(f => f.isPicking || f.isPickingLoadButton) || p.subPages.some(sp => sp.fields.some(f => f.isPicking || f.isPickingLoadButton))) && (
             <div className="picking-hint">Click element (ESC = cancel)</div>
           )}
-          <div className="info"><strong>v4.1:</strong> Field-level Load Strategy!</div>
+          <div className="info"><strong>v4.2:</strong> Array item types!</div>
           <div className="group"><label className="label">Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div style={{ marginTop: '16px' }}>
             <div className="tabs">
@@ -703,7 +761,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
               <button className="tab" onClick={() => { 
                 setPages([...pages, { 
                   id: crypto.randomUUID(), 
-                  name: 'New', 
+                  name: 'Page', 
                   urlPattern: extractPattern(currentFullUrl), 
                   commonFields: [],
                   subPages: [],

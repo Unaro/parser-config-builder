@@ -1,19 +1,17 @@
 /**
- * Parser Types v4.1 - Field-Level Load Strategy
+ * Parser Types v4.2 - Array Item Types
  * @module types/parser.types
  */
 
 export type FieldType = 'string' | 'array' | 'image' | 'url' | 'number' | 'custom-object';
+export type ArrayItemType = 'string' | 'number' | 'image' | 'url' | 'custom-object';
 
-/**
- * Стратегии загрузки для полей
- */
 export type FieldLoadStrategy = 
-  | 'none'              // Нет загрузки
-  | 'click-expand'      // Клик на кнопку "Ещё" внутри поля
-  | 'infinite-scroll'   // Infinite scroll привязан к последнему элементу массива
-  | 'click-load-more'   // Клик на "Load More" для добавления элементов
-  | 'hover-expand';     // Раскрытие при наведении
+  | 'none'
+  | 'click-expand'
+  | 'infinite-scroll'
+  | 'click-load-more'
+  | 'hover-expand';
 
 export interface FieldTransform {
   type: 'regex' | 'split' | 'slice' | 'replace';
@@ -23,19 +21,12 @@ export interface FieldTransform {
   end?: number;
 }
 
-/**
- * Настройки загрузки для поля
- */
 export interface FieldLoadConfig {
   strategy: FieldLoadStrategy;
-  
-  // Для click-expand и click-load-more
   buttonSelector?: string;
-  
-  // Общие настройки
-  maxIterations?: number;      // Сколько раз кликать/скроллить
-  waitAfterAction?: number;    // Задержка после действия (ms)
-  stopWhenNoChange?: boolean;  // Остановиться если элементов не добавилось
+  maxIterations?: number;
+  waitAfterAction?: number;
+  stopWhenNoChange?: boolean;
 }
 
 export interface CustomField {
@@ -47,9 +38,13 @@ export interface CustomField {
   required: boolean;
   description?: string;
   transform?: FieldTransform;
+  
+  // Для type: 'array'
+  arrayItemType?: ArrayItemType;
+  
+  // Для arrayItemType: 'custom-object' или type: 'custom-object'
   customObjectTypeId?: string;
   
-  // Load Strategy для этого поля
   loadConfig?: FieldLoadConfig;
 }
 
@@ -76,23 +71,14 @@ export interface SubPage {
   fields: CustomField[];
 }
 
-/**
- * Конфигурация страницы
- * Page Load Strategy удален - теперь только на уровне полей
- */
 export interface PageConfig {
   id: string;
   name: string;
   urlPattern: string;
-  
-  // Tab switching на уровне страницы (опционально)
   tabSelector?: string;
-  
   commonFields: readonly CustomField[];
   subPages?: readonly SubPage[];
   customObjectTypes: readonly CustomObjectType[];
-  
-  // Deprecated
   fields: readonly CustomField[];
   loadStrategy?: any;
 }
@@ -126,7 +112,6 @@ export interface FieldPreset {
   required?: boolean;
 }
 
-// Deprecated (обратная совместимость)
 export type ParsedData = ParsedPageData;
 export type LoadStrategy = FieldLoadStrategy;
 export type WaitStrategy = FieldLoadConfig;
