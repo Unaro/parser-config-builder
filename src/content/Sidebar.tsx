@@ -1,5 +1,5 @@
 /**
- * Sidebar v3.4 - Show/Hide Toggle
+ * Sidebar v3.5 - Multi-layer Preview
  * @module content/Sidebar
  */
 
@@ -11,7 +11,7 @@ import { browser } from '@lib/utils/browser-api';
 import { parserService } from '@lib/parser/parser.service';
 import { extractPattern, suggestPatterns, matchesPattern } from '@lib/utils/url-pattern-matcher';
 import { searchPresets } from '@lib/constants/field-presets';
-import { highlightElements, clearPreview } from '@lib/utils/visual-preview';
+import { highlightField, clearFieldPreview, clearAllPreviews, getFieldColor } from '@lib/utils/visual-preview';
 import { CustomObjectTypeBuilder } from '@components/features/CustomObjectTypeBuilder';
 import { ConfigSelector } from '@components/features/ConfigSelector';
 import type { CustomField, FieldType, PageConfig, CustomObjectType, ParserConfig, LoadStrategy } from '@lib/types/parser.types';
@@ -41,16 +41,17 @@ const styles = `
   .btn-pick { background: #667eea; color: white; height: 40px; }
   .btn-pick:hover { background: #5568d3; }
   .btn-pick.active { background: #10b981; animation: pulse 1.5s infinite; }
-  .btn-preview { background: #06b6d4; color: white; height: 40px; min-width: 70px; }
-  .btn-preview:hover { background: #0891b2; }
-  .btn-preview.active { background: #f59e0b; }
-  .btn-preview.active:hover { background: #d97706; }
+  .btn-preview { color: white; height: 40px; min-width: 70px; }
+  .btn-preview:hover { filter: brightness(1.1); }
   .btn-remove { background: #ef4444; color: white; height: 40px; width: 40px; }
   .btn-add { background: #10b981; color: white; width: 100%; margin-top: 12px; padding: 12px; }
   .btn-delete-page { background: #dc2626; color: white; padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; }
+  .btn-clear-all { background: #f59e0b; color: white; padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .btn-clear-all:hover { background: #d97706; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-  .validation { margin-top: 6px; padding: 8px; border-radius: 4px; font-size: 12px; background: #d1fae5; color: #065f46; }
-  .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .validation { margin-top: 6px; padding: 8px; border-radius: 4px; font-size: 12px; }
+  .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; position: relative; }
+  .card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 8px 0 0 8px; }
   .page-card { background: #faf5ff; border: 2px solid #e9d5ff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid #e5e7eb; overflow-x: auto; }
   .tab { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
@@ -69,6 +70,8 @@ const styles = `
   .object-type-meta { font-size: 11px; color: #6b7280; }
   .btn-icon { background: #ef4444; color: white; border: none; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 16px; }
   .strategy-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+  .preview-toolbar { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .color-indicator { width: 16px; height: 16px; border-radius: 3px; display: inline-block; margin-right: 6px; border: 2px solid white; box-shadow: 0 0 0 1px rgba(0,0,0,0.1); }
 `;
 
 interface FieldState extends CustomField {
@@ -83,26 +86,27 @@ interface PageState extends Omit<PageConfig, 'fields' | 'customObjectTypes'> {
   isPickingLoadStrategy?: boolean;
 }
 
-function DynamicField({ field, page, onChange, onRemove, onPick }: {
+function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick }: {
   field: FieldState;
+  fieldIndex: number;
   page: PageState;
   onChange: (u: Partial<FieldState>) => void;
   onRemove: () => void;
   onPick: () => void;
 }) {
   const [showPresets, setShowPresets] = useState(false);
+  const fieldColor = getFieldColor(fieldIndex);
 
   const handleTogglePreview = () => {
     if (!field.selector) return;
     
     if (field.isHighlighted) {
-      // Скрываем
-      clearPreview();
-      onChange({ isHighlighted: false, validation: null });
+      // Скрываем это поле
+      clearFieldPreview(field.id);
+      onChange({ isHighlighted: false });
     } else {
-      // Показываем
-      clearPreview(); // Очищаем все предыдущие
-      const count = highlightElements(field.selector, '#06b6d4');
+      // Показываем это поле
+      const count = highlightField(field.id, field.selector, fieldIndex);
       const validation = parserService.validateSelector(document, field.selector, field.type);
       onChange({ 
         isHighlighted: true,
@@ -116,9 +120,12 @@ function DynamicField({ field, page, onChange, onRemove, onPick }: {
   };
 
   return (
-    <div className="card">
+    <div className="card" style={{ borderLeftColor: fieldColor, borderLeftWidth: '4px' }}>
       <div className="group">
-        <label className="label">Name</label>
+        <label className="label">
+          <span className="color-indicator" style={{ background: fieldColor }}></span>
+          Name
+        </label>
         <input className="input" value={field.name} onChange={(e) => { onChange({ name: e.target.value, key: e.target.value.toLowerCase().replace(/\s+/g, '_') }); setShowPresets(e.target.value.length > 0); }} onFocus={() => setShowPresets(field.name.length > 0)} onBlur={() => setTimeout(() => setShowPresets(false), 200)} placeholder="Type to search..." />
         {showPresets && (
           <div className="preset-dropdown">
@@ -159,7 +166,8 @@ function DynamicField({ field, page, onChange, onRemove, onPick }: {
           </button>
           {field.selector && (
             <button 
-              className={`btn btn-preview ${field.isHighlighted ? 'active' : ''}`} 
+              className="btn btn-preview"
+              style={{ background: field.isHighlighted ? '#f59e0b' : fieldColor }}
               onClick={handleTogglePreview} 
               type="button"
             >
@@ -169,7 +177,7 @@ function DynamicField({ field, page, onChange, onRemove, onPick }: {
           <button className="btn btn-remove" onClick={onRemove} type="button">×</button>
         </div>
         {field.validation && (
-          <div className="validation">
+          <div className="validation" style={{ background: `${fieldColor}15`, color: fieldColor.replace('#', '') }}>
             {field.isHighlighted ? 'Highlighted' : 'Found'}: {field.validation.count} element(s)
           </div>
         )}
@@ -200,12 +208,28 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
     await eventBus.publish(ParserEventFactory.createElementPickRequest('load-strategy-picker', 'string'));
   };
 
+  const highlightedCount = page.fields.filter(f => f.isHighlighted).length;
+
   return (
     <div className="page-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <input className="input" value={page.name} onChange={(e) => onChange({ name: e.target.value })} style={{ background: 'transparent', border: 'none', fontSize: '16px', fontWeight: 600, color: '#6b21a8', padding: 0, flex: 1 }} />
         <button className="btn-delete-page" onClick={onDelete} type="button">Delete</button>
       </div>
+
+      {highlightedCount > 0 && (
+        <div className="preview-toolbar">
+          <span style={{ fontSize: '13px', fontWeight: 500 }}>
+            {highlightedCount} field(s) highlighted
+          </span>
+          <button className="btn-clear-all" onClick={() => {
+            clearAllPreviews();
+            onChange({ fields: page.fields.map(f => ({ ...f, isHighlighted: false })) });
+          }} type="button">
+            Clear All
+          </button>
+        </div>
+      )}
 
       <div className="group">
         <label className="label">URL Pattern</label>
@@ -273,7 +297,23 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
       </div>
 
       <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>Fields ({page.fields.length})</div>
-      {page.fields.map((f) => <DynamicField key={f.id} field={f} page={page} onChange={(u) => onChange({ fields: page.fields.map(field => field.id === f.id ? { ...field, ...u } : field) })} onRemove={() => { if (f.isHighlighted) clearPreview(); onChange({ fields: page.fields.filter(field => field.id !== f.id) }); }} onPick={async () => { onChange({ fields: page.fields.map(field => ({ ...field, isPicking: field.id === f.id })) }); await eventBus.publish(ParserEventFactory.createElementPickRequest(f.id, f.type)); }} />)}
+      {page.fields.map((f, idx) => (
+        <DynamicField 
+          key={f.id} 
+          field={f} 
+          fieldIndex={idx}
+          page={page} 
+          onChange={(u) => onChange({ fields: page.fields.map(field => field.id === f.id ? { ...field, ...u } : field) })} 
+          onRemove={() => { 
+            if (f.isHighlighted) clearFieldPreview(f.id); 
+            onChange({ fields: page.fields.filter(field => field.id !== f.id) }); 
+          }} 
+          onPick={async () => { 
+            onChange({ fields: page.fields.map(field => ({ ...field, isPicking: field.id === f.id })) }); 
+            await eventBus.publish(ParserEventFactory.createElementPickRequest(f.id, f.type)); 
+          }} 
+        />
+      ))}
       <button className="btn btn-add" onClick={() => onChange({ fields: [...page.fields, { id: crypto.randomUUID(), name: '', key: '', type: 'string', selector: '', required: false, isPicking: false, validation: null, isHighlighted: false }] })} type="button">+ Add Field</button>
       
       {editingObjType && <CustomObjectTypeBuilder onSave={(t) => { onChange({ customObjectTypes: [...page.customObjectTypes, t] }); setEditingObjType(false); }} onCancel={() => setEditingObjType(false)} />}
@@ -318,7 +358,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
   const handleDeletePage = () => {
     if (pages.length === 1) { alert('Cannot delete last page'); return; }
     if (!confirm(`Delete page "${pages[currentTab]?.name}"?`)) return;
-    clearPreview();
+    clearAllPreviews();
     setPages(prev => prev.filter((_, i) => i !== currentTab));
     setCurrentTab(Math.max(0, currentTab - 1));
   };
@@ -369,7 +409,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
   const handleSave = async () => {
     if (!name) { alert('Enter name'); return; }
     
-    clearPreview();
+    clearAllPreviews();
     
     const config = { 
       id: existingConfig?.id || crypto.randomUUID(), 
@@ -395,7 +435,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
   };
 
   const handleClose = () => {
-    clearPreview();
+    clearAllPreviews();
     onClose();
   };
 
@@ -414,7 +454,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
           {pages.some(p => p.fields.some(f => f.isPicking) || p.isPickingLoadStrategy) && (
             <div className="picking-hint">Click element on page (ESC to cancel)</div>
           )}
-          <div className="info"><strong>v3.4:</strong> Show/Hide toggle for visual preview!</div>
+          <div className="info"><strong>v3.5:</strong> Multi-layer preview with colors!</div>
           <div className="group"><label className="label">Config Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div style={{ marginTop: '20px' }}>
             <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Pages ({pages.length})</div>
@@ -447,7 +487,7 @@ export function mountSidebar() {
   const url = window.location.origin;
   const name = document.title.split('-')[0]?.trim() || new URL(url).hostname;
   const root = createRoot(i);
-  root.render(<Sidebar onClose={() => { root.unmount(); c.remove(); clearPreview(); }} initialUrl={url} initialName={`${name} Parser`} />);
+  root.render(<Sidebar onClose={() => { root.unmount(); c.remove(); clearAllPreviews(); }} initialUrl={url} initialName={`${name} Parser`} />);
 }
 
 export function isSidebarOpen(): boolean {
