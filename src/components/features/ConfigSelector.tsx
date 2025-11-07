@@ -114,7 +114,6 @@ export function ConfigSelector({ currentUrl, onSelect, onCancel }: ConfigSelecto
               </>
             ) : (
               <div className="empty-state">
-                <div className="empty-icon">Ì≥ù</div>
                 <h3 className="empty-title">No configurations for this site</h3>
                 <p className="empty-text">Create your first configuration!</p>
               </div>

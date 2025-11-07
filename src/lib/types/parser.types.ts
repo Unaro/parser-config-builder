@@ -1,115 +1,140 @@
 /**
- * Parser Types v3.1 - Custom Object Types
- * @module parser.types
+ * Parser Types v4.1 - Field-Level Load Strategy
+ * @module types/parser.types
  */
 
-export type FieldType = 'string' | 'array' | 'custom-object' | 'image' | 'url' | 'number';
-export type LoadStrategy = 'static' | 'pagination' | 'infinite-scroll' | 'click-load' | 'tab-switch' | 'ajax-wait';
-
-export interface WaitStrategy {
-  readonly type: LoadStrategy;
-  readonly selector?: string;
-  readonly timeout?: number;
-  readonly scrollDistance?: number;
-  readonly waitForSelector?: string;
-  readonly maxIterations?: number;
-}
+export type FieldType = 'string' | 'array' | 'image' | 'url' | 'number' | 'custom-object';
 
 /**
- * Определение поля внутри кастомного объекта
+ * Стратегии загрузки для полей
  */
-export interface ObjectFieldDefinition {
-  readonly id: string;
-  readonly name: string;
-  readonly key: string;
-  readonly type: 'string' | 'number' | 'image' | 'url' | 'array';
-  readonly selector: string;  // Относительный селектор
-  readonly required: boolean;
-}
-
-/**
- * Определение кастомного типа объекта
- */
-export interface CustomObjectType {
-  readonly id: string;
-  readonly name: string;  // "Work", "Chapter", "Author"
-  readonly containerSelector: string;  // Селектор контейнера объекта
-  readonly fields: readonly ObjectFieldDefinition[];  // Поля объекта
-}
+export type FieldLoadStrategy = 
+  | 'none'              // Нет загрузки
+  | 'click-expand'      // Клик на кнопку "Ещё" внутри поля
+  | 'infinite-scroll'   // Infinite scroll привязан к последнему элементу массива
+  | 'click-load-more'   // Клик на "Load More" для добавления элементов
+  | 'hover-expand';     // Раскрытие при наведении
 
 export interface FieldTransform {
-  readonly type: 'regex' | 'split' | 'replace' | 'trim' | 'lowercase' | 'uppercase';
-  readonly pattern?: string;
-  readonly replacement?: string;
-  readonly separator?: string;
+  type: 'regex' | 'split' | 'slice' | 'replace';
+  pattern?: string;
+  replacement?: string;
+  start?: number;
+  end?: number;
 }
 
 /**
- * Поле парсера
+ * Настройки загрузки для поля
  */
-export interface CustomField {
-  readonly id: string;
-  readonly name: string;
-  readonly key: string;
-  readonly type: FieldType;
-  readonly selector: string;
-  readonly required: boolean;
-  readonly description?: string;
-  readonly transform?: FieldTransform;
-  readonly customObjectTypeId?: string;  // ID кастомного типа если type === 'custom-object'
+export interface FieldLoadConfig {
+  strategy: FieldLoadStrategy;
+  
+  // Для click-expand и click-load-more
+  buttonSelector?: string;
+  
+  // Общие настройки
+  maxIterations?: number;      // Сколько раз кликать/скроллить
+  waitAfterAction?: number;    // Задержка после действия (ms)
+  stopWhenNoChange?: boolean;  // Остановиться если элементов не добавилось
 }
 
+export interface CustomField {
+  id: string;
+  name: string;
+  key: string;
+  type: FieldType;
+  selector: string;
+  required: boolean;
+  description?: string;
+  transform?: FieldTransform;
+  customObjectTypeId?: string;
+  
+  // Load Strategy для этого поля
+  loadConfig?: FieldLoadConfig;
+}
+
+export interface ObjectFieldDefinition {
+  id: string;
+  name: string;
+  key: string;
+  type: Exclude<FieldType, 'custom-object'>;
+  selector: string;
+  required: boolean;
+}
+
+export interface CustomObjectType {
+  id: string;
+  name: string;
+  containerSelector: string;
+  fields: ObjectFieldDefinition[];
+}
+
+export interface SubPage {
+  id: string;
+  name: string;
+  urlPattern: string;
+  fields: CustomField[];
+}
+
+/**
+ * Конфигурация страницы
+ * Page Load Strategy удален - теперь только на уровне полей
+ */
 export interface PageConfig {
-  readonly id: string;
-  readonly name: string;
-  readonly urlPattern: string;
-  readonly fields: readonly CustomField[];
-  readonly loadStrategy: WaitStrategy;
-  readonly customObjectTypes: readonly CustomObjectType[];  // Определения кастомных типов для этой страницы
-  readonly description?: string;
+  id: string;
+  name: string;
+  urlPattern: string;
+  
+  // Tab switching на уровне страницы (опционально)
+  tabSelector?: string;
+  
+  commonFields: readonly CustomField[];
+  subPages?: readonly SubPage[];
+  customObjectTypes: readonly CustomObjectType[];
+  
+  // Deprecated
+  fields: readonly CustomField[];
+  loadStrategy?: any;
 }
 
 export interface ParserConfig {
-  readonly id: string;
-  readonly name: string;
-  readonly version: string;
-  readonly targetUrl: string;
-  readonly pages: readonly PageConfig[];
-  readonly metadata: ParserMetadata;
-  readonly options?: ParserOptions;
-}
-
-export interface ParserMetadata {
-  readonly created: Date;
-  readonly updated: Date;
-  readonly author: string;
-  readonly tags: readonly string[];
-  readonly siteUrl: string;
-  readonly description?: string;
-}
-
-export interface ParserOptions {
-  readonly delay?: number;
-  readonly maxRetries?: number;
-  readonly userAgent?: string;
-  readonly headers?: Record<string, string>;
+  id: string;
+  name: string;
+  version: string;
+  targetUrl: string;
+  pages: readonly PageConfig[];
+  metadata: {
+    created: Date;
+    updated: Date;
+    author: string;
+    tags: string[];
+    siteUrl: string;
+  };
 }
 
 export interface ParsedPageData {
-  readonly pageType: string;
-  readonly data: Record<string, unknown>;
-  readonly hasMore?: boolean;
-  readonly nextPageUrl?: string;
+  pageType: string;
+  data: Record<string, unknown>;
 }
 
-export type ParsedData = Record<string, unknown>;
-export type SelectorValidationStatus = 'valid' | 'invalid' | 'pending' | 'untested';
+export interface FieldPreset {
+  name: string;
+  key: string;
+  type: FieldType;
+  description: string;
+  commonSelectors?: string[];
+  required?: boolean;
+}
+
+// Deprecated (обратная совместимость)
+export type ParsedData = ParsedPageData;
+export type LoadStrategy = FieldLoadStrategy;
+export type WaitStrategy = FieldLoadConfig;
 
 export interface SelectorValidationResult {
-  readonly selector: string;
-  readonly status: SelectorValidationStatus;
-  readonly elementCount: number;
-  readonly error?: string;
-  readonly previewText?: string;
-  readonly arrayPreview?: string[];
+  isValid: boolean;
+  elementCount: number;
+  previewText?: string;
+  arrayPreview?: string[];
+  error?: string;
 }
