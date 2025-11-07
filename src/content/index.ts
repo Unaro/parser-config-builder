@@ -1,5 +1,5 @@
 /**
- * Content Script v3.2
+ * Content Script v3.4
  * @module content
  */
 
@@ -9,9 +9,8 @@ import { parserService } from '@lib/parser/parser.service';
 import { mountGearButton } from './GearButton';
 import type { ElementPickRequestEvent } from '@lib/events/parser.events';
 
-console.log('[Content] Script loaded');
+console.log('[Content] Script loaded v3.4');
 
-// Монтируем кнопку при загрузке
 mountGearButton();
 
 let currentPickingFieldId: string | null = null;
@@ -20,7 +19,7 @@ let overlay: HTMLElement | null = null;
 let highlightedElement: HTMLElement | null = null;
 
 eventBus.subscribe<ElementPickRequestEvent['data']>('element.pick.request', (event) => {
-  console.log('[Content] Pick request:', event.data);
+  console.log('[Content] Pick request:', event.data.fieldId);
   currentPickingFieldId = event.data.fieldId;
   currentFieldType = event.data.fieldType;
   startElementPicking();
@@ -130,8 +129,13 @@ function handleClick(e: MouseEvent) {
   
   if (!currentPickingFieldId) return;
 
+  // Для load-strategy-picker всегда используем single mode
+  const isLoadStrategyPicker = currentPickingFieldId === 'load-strategy-picker';
+  const isContainerPicker = currentPickingFieldId === 'container-picker';
   const isArrayType = currentFieldType === 'array' || currentFieldType === 'custom-object';
-  const selector = parserService.generateSelector(target, isArrayType);
+  
+  const detectArray = !isLoadStrategyPicker && (isContainerPicker || isArrayType);
+  const selector = parserService.generateSelector(target, detectArray);
   
   const validation = parserService.validateSelector(document, selector, currentFieldType || 'string');
   
@@ -155,9 +159,7 @@ function handleClick(e: MouseEvent) {
 
 function handleEscape(e: KeyboardEvent) {
   if (e.key === 'Escape' && currentPickingFieldId) {
-    eventBus.publish(
-      ParserEventFactory.createElementPickCancelled(currentPickingFieldId)
-    );
+    eventBus.publish(ParserEventFactory.createElementPickCancelled(currentPickingFieldId));
     stopElementPicking();
     currentPickingFieldId = null;
     currentFieldType = null;

@@ -1,5 +1,5 @@
 /**
- * Sidebar v3.3 - Full Featured
+ * Sidebar v3.4 - Show/Hide Toggle
  * @module content/Sidebar
  */
 
@@ -11,6 +11,7 @@ import { browser } from '@lib/utils/browser-api';
 import { parserService } from '@lib/parser/parser.service';
 import { extractPattern, suggestPatterns, matchesPattern } from '@lib/utils/url-pattern-matcher';
 import { searchPresets } from '@lib/constants/field-presets';
+import { highlightElements, clearPreview } from '@lib/utils/visual-preview';
 import { CustomObjectTypeBuilder } from '@components/features/CustomObjectTypeBuilder';
 import { ConfigSelector } from '@components/features/ConfigSelector';
 import type { CustomField, FieldType, PageConfig, CustomObjectType, ParserConfig, LoadStrategy } from '@lib/types/parser.types';
@@ -36,21 +37,23 @@ const styles = `
   .input:focus { outline: none; border-color: #667eea; }
   .select { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; background: white; font-size: 14px; }
   .row { display: flex; gap: 8px; }
-  .btn { padding: 10px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+  .btn { padding: 10px 16px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: all 0.2s; }
   .btn-pick { background: #667eea; color: white; height: 40px; }
+  .btn-pick:hover { background: #5568d3; }
   .btn-pick.active { background: #10b981; animation: pulse 1.5s infinite; }
+  .btn-preview { background: #06b6d4; color: white; height: 40px; min-width: 70px; }
+  .btn-preview:hover { background: #0891b2; }
+  .btn-preview.active { background: #f59e0b; }
+  .btn-preview.active:hover { background: #d97706; }
   .btn-remove { background: #ef4444; color: white; height: 40px; width: 40px; }
   .btn-add { background: #10b981; color: white; width: 100%; margin-top: 12px; padding: 12px; }
   .btn-delete-page { background: #dc2626; color: white; padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
   .validation { margin-top: 6px; padding: 8px; border-radius: 4px; font-size: 12px; background: #d1fae5; color: #065f46; }
-  .preview-data { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; margin-top: 8px; max-height: 150px; overflow-y: auto; }
-  .preview-label { font-size: 11px; font-weight: 600; color: #0369a1; margin-bottom: 6px; }
-  .preview-value { font-size: 12px; color: #0c4a6e; background: white; padding: 6px; border-radius: 4px; margin-bottom: 4px; word-break: break-word; }
   .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
   .page-card { background: #faf5ff; border: 2px solid #e9d5ff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid #e5e7eb; overflow-x: auto; }
-  .tab { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+  .tab { padding: 8px 16px; border: none; background: none; cursor: pointer; font-size: 14px; color: #6b7280; border-bottom: 2px solid transparent; margin-bottom: -2px; }
   .tab.active { color: #667eea; border-bottom-color: #667eea; }
   .footer { padding: 16px 20px; border-top: 1px solid #e5e7eb; display: flex; gap: 12px; }
   .btn-footer { flex: 1; padding: 12px; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; }
@@ -64,18 +67,20 @@ const styles = `
   .object-type-item { background: white; padding: 10px; margin-bottom: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e5e7eb; }
   .object-type-name { font-weight: 600; font-size: 13px; }
   .object-type-meta { font-size: 11px; color: #6b7280; }
-  .btn-icon { background: #ef4444; color: white; border: none; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 16px; line-height: 1; }
-  .strategy-box { background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+  .btn-icon { background: #ef4444; color: white; border: none; width: 28px; height: 28px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+  .strategy-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
 `;
 
 interface FieldState extends CustomField {
   isPicking: boolean;
   validation: { status: string; count: number; arrayPreview?: string[] } | null;
+  isHighlighted?: boolean;
 }
 
 interface PageState extends Omit<PageConfig, 'fields' | 'customObjectTypes'> {
   fields: FieldState[];
   customObjectTypes: CustomObjectType[];
+  isPickingLoadStrategy?: boolean;
 }
 
 function DynamicField({ field, page, onChange, onRemove, onPick }: {
@@ -86,13 +91,28 @@ function DynamicField({ field, page, onChange, onRemove, onPick }: {
   onPick: () => void;
 }) {
   const [showPresets, setShowPresets] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
 
-  const handlePreview = () => {
+  const handleTogglePreview = () => {
     if (!field.selector) return;
-    const validation = parserService.validateSelector(document, field.selector, field.type);
-    onChange({ validation: { status: validation.isValid ? 'valid' : 'invalid', count: validation.elementCount, arrayPreview: validation.arrayPreview } });
-    setShowPreview(true);
+    
+    if (field.isHighlighted) {
+      // Скрываем
+      clearPreview();
+      onChange({ isHighlighted: false, validation: null });
+    } else {
+      // Показываем
+      clearPreview(); // Очищаем все предыдущие
+      const count = highlightElements(field.selector, '#06b6d4');
+      const validation = parserService.validateSelector(document, field.selector, field.type);
+      onChange({ 
+        isHighlighted: true,
+        validation: { 
+          status: validation.isValid ? 'valid' : 'invalid', 
+          count, 
+          arrayPreview: validation.arrayPreview 
+        } 
+      });
+    }
   };
 
   return (
@@ -134,21 +154,23 @@ function DynamicField({ field, page, onChange, onRemove, onPick }: {
         <label className="label">Selector</label>
         <div className="row">
           <input className="input" value={field.selector} onChange={(e) => onChange({ selector: e.target.value })} style={{ flex: 1 }} />
-          <button className={`btn btn-pick ${field.isPicking ? 'active' : ''}`} onClick={onPick} type="button">{field.isPicking ? 'Picking...' : 'Pick'}</button>
-          {field.selector && <button className="btn btn-pick" onClick={handlePreview} type="button" style={{ background: '#06b6d4' }}>Preview</button>}
+          <button className={`btn btn-pick ${field.isPicking ? 'active' : ''}`} onClick={onPick} type="button">
+            {field.isPicking ? 'Picking...' : 'Pick'}
+          </button>
+          {field.selector && (
+            <button 
+              className={`btn btn-preview ${field.isHighlighted ? 'active' : ''}`} 
+              onClick={handleTogglePreview} 
+              type="button"
+            >
+              {field.isHighlighted ? 'Hide' : 'Show'}
+            </button>
+          )}
           <button className="btn btn-remove" onClick={onRemove} type="button">×</button>
         </div>
         {field.validation && (
           <div className="validation">
-            Found: {field.validation.count} element(s)
-            {showPreview && field.validation.arrayPreview && field.validation.arrayPreview.length > 0 && (
-              <div className="preview-data">
-                <div className="preview-label">Preview Data:</div>
-                {field.validation.arrayPreview.map((text, i) => (
-                  <div key={i} className="preview-value">{i + 1}. {text || '(empty)'}</div>
-                ))}
-              </div>
-            )}
+            {field.isHighlighted ? 'Highlighted' : 'Found'}: {field.validation.count} element(s)
           </div>
         )}
       </div>
@@ -173,11 +195,16 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
     });
   };
 
+  const handlePickLoadStrategy = async () => {
+    onChange({ isPickingLoadStrategy: true });
+    await eventBus.publish(ParserEventFactory.createElementPickRequest('load-strategy-picker', 'string'));
+  };
+
   return (
     <div className="page-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <input className="input" value={page.name} onChange={(e) => onChange({ name: e.target.value })} style={{ background: 'transparent', border: 'none', fontSize: '16px', fontWeight: 600, color: '#6b21a8', padding: 0, flex: 1 }} />
-        <button className="btn-delete-page" onClick={onDelete} type="button">Delete Page</button>
+        <button className="btn-delete-page" onClick={onDelete} type="button">Delete</button>
       </div>
 
       <div className="group">
@@ -195,22 +222,36 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
       <div className="strategy-box">
         <label className="label">Load Strategy</label>
         <select className="select" value={page.loadStrategy.type} onChange={(e) => onChange({ loadStrategy: { ...page.loadStrategy, type: e.target.value as LoadStrategy }})}>
-          <option value="static">Static - No dynamic loading</option>
-          <option value="pagination">Pagination - Click "Next" button</option>
+          <option value="static">Static</option>
+          <option value="pagination">Pagination</option>
           <option value="infinite-scroll">Infinite Scroll</option>
-          <option value="click-load">Click to Load More</option>
+          <option value="click-load">Click to Load</option>
           <option value="tab-switch">Tab Switch</option>
-          <option value="ajax-wait">Wait for AJAX</option>
+          <option value="ajax-wait">AJAX Wait</option>
         </select>
         {page.loadStrategy.type !== 'static' && (
           <div style={{ marginTop: '8px' }}>
-            <input 
-              className="input" 
-              placeholder="Button/element selector (optional)" 
-              value={page.loadStrategy.selector || ''} 
-              onChange={(e) => onChange({ loadStrategy: { ...page.loadStrategy, selector: e.target.value }})}
-              style={{ fontSize: '13px' }}
-            />
+            <div className="row">
+              <input 
+                className="input" 
+                placeholder="Button/trigger selector" 
+                value={page.loadStrategy.selector || ''} 
+                onChange={(e) => onChange({ loadStrategy: { ...page.loadStrategy, selector: e.target.value }})}
+                style={{ flex: 1, fontSize: '13px' }}
+              />
+              <button 
+                className={`btn btn-pick ${page.isPickingLoadStrategy ? 'active' : ''}`}
+                onClick={handlePickLoadStrategy}
+                type="button"
+              >
+                {page.isPickingLoadStrategy ? 'Picking...' : 'Pick'}
+              </button>
+            </div>
+            <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+              {page.loadStrategy.type === 'pagination' && 'Select "Next" button'}
+              {page.loadStrategy.type === 'click-load' && 'Select "Load More" button'}
+              {page.loadStrategy.type === 'tab-switch' && 'Select tab elements'}
+            </div>
           </div>
         )}
       </div>
@@ -232,8 +273,8 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
       </div>
 
       <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb' }}>Fields ({page.fields.length})</div>
-      {page.fields.map((f) => <DynamicField key={f.id} field={f} page={page} onChange={(u) => onChange({ fields: page.fields.map(field => field.id === f.id ? { ...field, ...u } : field) })} onRemove={() => onChange({ fields: page.fields.filter(field => field.id !== f.id) })} onPick={async () => { onChange({ fields: page.fields.map(field => ({ ...field, isPicking: field.id === f.id })) }); await eventBus.publish(ParserEventFactory.createElementPickRequest(f.id, f.type)); }} />)}
-      <button className="btn btn-add" onClick={() => onChange({ fields: [...page.fields, { id: crypto.randomUUID(), name: '', key: '', type: 'string', selector: '', required: false, isPicking: false, validation: null }] })} type="button">+ Add Field</button>
+      {page.fields.map((f) => <DynamicField key={f.id} field={f} page={page} onChange={(u) => onChange({ fields: page.fields.map(field => field.id === f.id ? { ...field, ...u } : field) })} onRemove={() => { if (f.isHighlighted) clearPreview(); onChange({ fields: page.fields.filter(field => field.id !== f.id) }); }} onPick={async () => { onChange({ fields: page.fields.map(field => ({ ...field, isPicking: field.id === f.id })) }); await eventBus.publish(ParserEventFactory.createElementPickRequest(f.id, f.type)); }} />)}
+      <button className="btn btn-add" onClick={() => onChange({ fields: [...page.fields, { id: crypto.randomUUID(), name: '', key: '', type: 'string', selector: '', required: false, isPicking: false, validation: null, isHighlighted: false }] })} type="button">+ Add Field</button>
       
       {editingObjType && <CustomObjectTypeBuilder onSave={(t) => { onChange({ customObjectTypes: [...page.customObjectTypes, t] }); setEditingObjType(false); }} onCancel={() => setEditingObjType(false)} />}
     </div>
@@ -257,8 +298,9 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
       setName(config.name);
       setPages(config.pages.map(p => ({ 
         ...p, 
-        fields: p.fields.map(f => ({ ...f, isPicking: false, validation: null })), 
-        customObjectTypes: [...(p.customObjectTypes || [])]
+        fields: p.fields.map(f => ({ ...f, isPicking: false, validation: null, isHighlighted: false })), 
+        customObjectTypes: [...(p.customObjectTypes || [])],
+        isPickingLoadStrategy: false
       })));
     } else {
       setPages([{ 
@@ -267,46 +309,68 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
         urlPattern: extractPattern(currentFullUrl), 
         loadStrategy: { type: 'static' }, 
         fields: [], 
-        customObjectTypes: [] 
+        customObjectTypes: [],
+        isPickingLoadStrategy: false
       }]);
     }
   };
 
   const handleDeletePage = () => {
-    if (pages.length === 1) {
-      alert('Cannot delete the last page');
-      return;
-    }
+    if (pages.length === 1) { alert('Cannot delete last page'); return; }
     if (!confirm(`Delete page "${pages[currentTab]?.name}"?`)) return;
-    
+    clearPreview();
     setPages(prev => prev.filter((_, i) => i !== currentTab));
     setCurrentTab(Math.max(0, currentTab - 1));
   };
 
   useEffect(() => {
-    const up = eventBus.subscribe<ElementPickedEvent['data']>('element.picked', (e) => { 
-      setPages(prev => prev.map(p => ({ 
-        ...p, 
-        fields: p.fields.map(f => f.id === e.data.fieldId ? { ...f, selector: e.data.selector, isPicking: false, validation: { status: 'valid', count: e.data.elementCount, arrayPreview: e.data.arrayPreview }} : f) 
-      }))); 
+    const up = eventBus.subscribe<ElementPickedEvent['data']>('element.picked', (e) => {
+      if (e.data.fieldId === 'load-strategy-picker') {
+        setPages(prev => prev.map((p, i) => i === currentTab ? { 
+          ...p, 
+          loadStrategy: { ...p.loadStrategy, selector: e.data.selector },
+          isPickingLoadStrategy: false
+        } : p));
+      } else {
+        setPages(prev => prev.map(p => ({ 
+          ...p, 
+          fields: p.fields.map(f => f.id === e.data.fieldId ? { 
+            ...f, 
+            selector: e.data.selector, 
+            isPicking: false, 
+            validation: { status: 'valid', count: e.data.elementCount, arrayPreview: e.data.arrayPreview },
+            isHighlighted: false
+          } : f) 
+        })));
+      }
       setIsVisible(true); 
     });
-    const uc = eventBus.subscribe<ElementPickCancelledEvent['data']>('element.pick.cancelled', (e) => { 
-      setPages(prev => prev.map(p => ({ 
-        ...p, 
-        fields: p.fields.map(f => f.id === e.data.fieldId ? { ...f, isPicking: false } : f) 
-      }))); 
+    
+    const uc = eventBus.subscribe<ElementPickCancelledEvent['data']>('element.pick.cancelled', (e) => {
+      if (e.data.fieldId === 'load-strategy-picker') {
+        setPages(prev => prev.map((p, i) => i === currentTab ? { ...p, isPickingLoadStrategy: false } : p));
+      } else {
+        setPages(prev => prev.map(p => ({ 
+          ...p, 
+          fields: p.fields.map(f => f.id === e.data.fieldId ? { ...f, isPicking: false } : f) 
+        })));
+      }
       setIsVisible(true); 
     });
+    
     return () => { up(); uc(); };
-  }, []);
+  }, [currentTab]);
 
   useEffect(() => {
-    if (pages.some(p => p.fields.some(f => f.isPicking))) setIsVisible(false);
+    const anyPicking = pages.some(p => p.fields.some(f => f.isPicking) || p.isPickingLoadStrategy);
+    if (anyPicking) setIsVisible(false);
   }, [pages]);
 
   const handleSave = async () => {
     if (!name) { alert('Enter name'); return; }
+    
+    clearPreview();
+    
     const config = { 
       id: existingConfig?.id || crypto.randomUUID(), 
       name, 
@@ -330,29 +394,40 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
     } catch { alert('Error'); }
   };
 
-  if (showSelector) return <ConfigSelector currentUrl={currentFullUrl} onSelect={handleConfigSelected} onCancel={onClose} />;
+  const handleClose = () => {
+    clearPreview();
+    onClose();
+  };
+
+  if (showSelector) return <ConfigSelector currentUrl={currentFullUrl} onSelect={handleConfigSelected} onCancel={handleClose} />;
 
   return (
     <>
       <style>{styles}</style>
       <div className={`sidebar ${!isVisible ? 'hidden' : ''}`}>
-        <div className="header"><h2 className="title">{existingConfig ? 'Edit' : 'Create'} Config</h2><button className="close" onClick={onClose} type="button">×</button></div>
+        <div className="header">
+          <h2 className="title">{existingConfig ? 'Edit' : 'Create'} Config</h2>
+          <button className="close" onClick={handleClose} type="button">×</button>
+        </div>
+        
         <div className="content">
-          {pages.some(p => p.fields.some(f => f.isPicking)) && <div className="picking-hint">Click element on page (ESC to cancel)</div>}
-          <div className="info"><strong>v3.3:</strong> Load Strategy + Delete options!</div>
+          {pages.some(p => p.fields.some(f => f.isPicking) || p.isPickingLoadStrategy) && (
+            <div className="picking-hint">Click element on page (ESC to cancel)</div>
+          )}
+          <div className="info"><strong>v3.4:</strong> Show/Hide toggle for visual preview!</div>
           <div className="group"><label className="label">Config Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div style={{ marginTop: '20px' }}>
             <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Pages ({pages.length})</div>
             <div className="tabs">
               {pages.map((p, i) => <button key={p.id} className={`tab ${currentTab === i ? 'active' : ''}`} onClick={() => setCurrentTab(i)} type="button">{p.name}</button>)}
-              <button className="tab" onClick={() => { setPages([...pages, { id: crypto.randomUUID(), name: 'New Page', urlPattern: extractPattern(currentFullUrl), loadStrategy: { type: 'static' }, fields: [], customObjectTypes: [] }]); setCurrentTab(pages.length); }} type="button" style={{ color: '#10b981' }}>+ Page</button>
+              <button className="tab" onClick={() => { setPages([...pages, { id: crypto.randomUUID(), name: 'New Page', urlPattern: extractPattern(currentFullUrl), loadStrategy: { type: 'static' }, fields: [], customObjectTypes: [], isPickingLoadStrategy: false }]); setCurrentTab(pages.length); }} type="button" style={{ color: '#10b981' }}>+ Page</button>
             </div>
             {pages[currentTab] && <PageEditor page={pages[currentTab]} currentUrl={currentFullUrl} onChange={(u) => setPages(prev => prev.map((p, i) => i === currentTab ? { ...p, ...u } : p))} onDelete={handleDeletePage} />}
           </div>
         </div>
         <div className="footer">
-          <button className="btn btn-footer btn-secondary" onClick={onClose} type="button">Cancel</button>
-          <button className="btn btn-footer btn-primary" onClick={handleSave} type="button">Save Config</button>
+          <button className="btn btn-footer btn-secondary" onClick={handleClose} type="button">Cancel</button>
+          <button className="btn btn-footer btn-primary" onClick={handleSave} type="button">Save</button>
         </div>
       </div>
     </>
@@ -372,7 +447,7 @@ export function mountSidebar() {
   const url = window.location.origin;
   const name = document.title.split('-')[0]?.trim() || new URL(url).hostname;
   const root = createRoot(i);
-  root.render(<Sidebar onClose={() => { root.unmount(); c.remove(); }} initialUrl={url} initialName={`${name} Parser`} />);
+  root.render(<Sidebar onClose={() => { root.unmount(); c.remove(); clearPreview(); }} initialUrl={url} initialName={`${name} Parser`} />);
 }
 
 export function isSidebarOpen(): boolean {
