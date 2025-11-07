@@ -1,51 +1,51 @@
 /**
- * Типы для multi-page конфигурации парсера
+ * Parser Types v3.1 - Custom Object Types
  * @module parser.types
- * @version 2.0.0
  */
 
-/**
- * Тип поля
- */
-export type FieldType = 'string' | 'array' | 'object' | 'image' | 'url' | 'number';
+export type FieldType = 'string' | 'array' | 'custom-object' | 'image' | 'url' | 'number';
+export type LoadStrategy = 'static' | 'pagination' | 'infinite-scroll' | 'click-load' | 'tab-switch' | 'ajax-wait';
 
-/**
- * Тип загрузки данных
- */
-export type LoadStrategy = 
-  | 'static'           // Все данные сразу на странице
-  | 'pagination'       // Пагинация с кнопками/ссылками
-  | 'infinite-scroll'  // Бесконечный скролл
-  | 'click-load'       // Кнопка "Load More"
-  | 'tab-switch'       // Переключение табов
-  | 'ajax-wait';       // Ожидание AJAX загрузки
-
-/**
- * Стратегия ожидания загрузки
- */
 export interface WaitStrategy {
   readonly type: LoadStrategy;
-  readonly selector?: string;           // Селектор кнопки/элемента для действия
-  readonly timeout?: number;            // Таймаут ожидания (мс)
-  readonly scrollDistance?: number;     // Для infinite-scroll - расстояние до низа
-  readonly waitForSelector?: string;    // Селектор элемента, который должен появиться
-  readonly maxIterations?: number;      // Максимум итераций (для pagination/infinite)
+  readonly selector?: string;
+  readonly timeout?: number;
+  readonly scrollDistance?: number;
+  readonly waitForSelector?: string;
+  readonly maxIterations?: number;
 }
 
 /**
- * Конфигурация страницы
+ * Определение поля внутри кастомного объекта
  */
-export interface PageConfig {
+export interface ObjectFieldDefinition {
   readonly id: string;
-  readonly name: string;                // "Catalog", "Work", "Chapter", "Author"
-  readonly urlPattern: string;          // Pattern для определения типа страницы
-  readonly fields: readonly CustomField[];
-  readonly loadStrategy: WaitStrategy;
-  readonly description?: string;
+  readonly name: string;
+  readonly key: string;
+  readonly type: 'string' | 'number' | 'image' | 'url' | 'array';
+  readonly selector: string;  // Относительный селектор
+  readonly required: boolean;
 }
 
 /**
- * Определение кастомного поля
+ * Определение кастомного типа объекта
+ */
+export interface CustomObjectType {
+  readonly id: string;
+  readonly name: string;  // "Work", "Chapter", "Author"
+  readonly containerSelector: string;  // Селектор контейнера объекта
+  readonly fields: readonly ObjectFieldDefinition[];  // Поля объекта
+}
+
+export interface FieldTransform {
+  readonly type: 'regex' | 'split' | 'replace' | 'trim' | 'lowercase' | 'uppercase';
+  readonly pattern?: string;
+  readonly replacement?: string;
+  readonly separator?: string;
+}
+
+/**
+ * Поле парсера
  */
 export interface CustomField {
   readonly id: string;
@@ -55,35 +55,30 @@ export interface CustomField {
   readonly selector: string;
   readonly required: boolean;
   readonly description?: string;
-  readonly transform?: FieldTransform;  // Трансформация значения
+  readonly transform?: FieldTransform;
+  readonly customObjectTypeId?: string;  // ID кастомного типа если type === 'custom-object'
 }
 
-/**
- * Трансформация поля
- */
-export interface FieldTransform {
-  readonly type: 'regex' | 'split' | 'replace' | 'trim' | 'lowercase' | 'uppercase';
-  readonly pattern?: string;
-  readonly replacement?: string;
-  readonly separator?: string;
+export interface PageConfig {
+  readonly id: string;
+  readonly name: string;
+  readonly urlPattern: string;
+  readonly fields: readonly CustomField[];
+  readonly loadStrategy: WaitStrategy;
+  readonly customObjectTypes: readonly CustomObjectType[];  // Определения кастомных типов для этой страницы
+  readonly description?: string;
 }
 
-/**
- * Основная multi-page конфигурация парсера
- */
 export interface ParserConfig {
   readonly id: string;
   readonly name: string;
   readonly version: string;
-  readonly targetUrl: string;             // Base URL сайта
-  readonly pages: readonly PageConfig[];  // Конфигурации разных страниц
+  readonly targetUrl: string;
+  readonly pages: readonly PageConfig[];
   readonly metadata: ParserMetadata;
   readonly options?: ParserOptions;
 }
 
-/**
- * Метаданные конфигурации
- */
 export interface ParserMetadata {
   readonly created: Date;
   readonly updated: Date;
@@ -93,9 +88,6 @@ export interface ParserMetadata {
   readonly description?: string;
 }
 
-/**
- * Опции парсера
- */
 export interface ParserOptions {
   readonly delay?: number;
   readonly maxRetries?: number;
@@ -103,29 +95,16 @@ export interface ParserOptions {
   readonly headers?: Record<string, string>;
 }
 
-/**
- * Результат парсинга страницы
- */
 export interface ParsedPageData {
-  readonly pageType: string;           // "catalog", "work", "chapter"
+  readonly pageType: string;
   readonly data: Record<string, unknown>;
-  readonly hasMore?: boolean;          // Есть ли еще данные для загрузки
+  readonly hasMore?: boolean;
   readonly nextPageUrl?: string;
 }
 
-/**
- * Полный результат парсинга (все страницы)
- */
 export type ParsedData = Record<string, unknown>;
-
-/**
- * Статус валидации
- */
 export type SelectorValidationStatus = 'valid' | 'invalid' | 'pending' | 'untested';
 
-/**
- * Результат валидации селектора
- */
 export interface SelectorValidationResult {
   readonly selector: string;
   readonly status: SelectorValidationStatus;

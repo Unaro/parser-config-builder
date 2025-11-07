@@ -1,190 +1,165 @@
 /**
- * Content Script
+ * Content Script v3.2
  * @module content
- * @version 2.0.0
  */
 
 import { eventBus } from '@lib/events/event-bus';
-import { parserService } from '@lib/parser/parser.service';
 import { ParserEventFactory } from '@lib/events/parser.events';
-import { browser } from '@lib/utils/browser-api';
-import { initTriggerButton } from './trigger-button';
-import { mountSidebar } from './Sidebar';
+import { parserService } from '@lib/parser/parser.service';
+import { mountGearButton } from './GearButton';
 import type { ElementPickRequestEvent } from '@lib/events/parser.events';
-import type { ParserConfig, ParsedData } from '@lib/types/parser.types';
-import './styles.css';
 
-console.log('[Content] Parser Config Builder loaded');
+console.log('[Content] Script loaded');
 
-function init(): void {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initTriggerButton());
-  } else {
-    initTriggerButton();
-  }
-}
+// Монтируем кнопку при загрузке
+mountGearButton();
 
-init();
-
-let isPickerActive = false;
-let currentFieldId: string | null = null;
+let currentPickingFieldId: string | null = null;
 let currentFieldType: string | null = null;
-let overlay: HTMLDivElement | null = null;
-let hoveredElement: HTMLElement | null = null;
+let overlay: HTMLElement | null = null;
+let highlightedElement: HTMLElement | null = null;
 
-browser.runtime.onMessage.addListener((message: unknown) => {
-  if (isParsePageMessage(message)) {
-    return handleParsePage(message.config);
-  }
-  
-  if (isOpenSidebarMessage(message)) {
-    mountSidebar();
-    return Promise.resolve({ success: true });
-  }
-  
-  return undefined;
+eventBus.subscribe<ElementPickRequestEvent['data']>('element.pick.request', (event) => {
+  console.log('[Content] Pick request:', event.data);
+  currentPickingFieldId = event.data.fieldId;
+  currentFieldType = event.data.fieldType;
+  startElementPicking();
 });
 
-function isParsePageMessage(msg: unknown): msg is { type: 'PARSE_PAGE'; config: ParserConfig } {
-  return typeof msg === 'object' && msg !== null && 'type' in msg && (msg as any).type === 'PARSE_PAGE';
-}
-
-function isOpenSidebarMessage(msg: unknown): msg is { type: 'OPEN_SIDEBAR' } {
-  return typeof msg === 'object' && msg !== null && 'type' in msg && (msg as any).type === 'OPEN_SIDEBAR';
-}
-
-async function handleParsePage(config: ParserConfig): Promise<ParsedData> {
-  try {
-    // Определяем тип текущей страницы
-    const pageConfig = parserService.detectPageType(config, window.location.href);
-    
-    if (!pageConfig) {
-      throw new Error('No matching page configuration found for this URL');
-    }
-
-    // Парсим страницу
-    const pageData = await parserService.parsePage(pageConfig, document);
-    
-    console.log('[Content] Parsed data:', pageData);
-    return pageData.data;
-  } catch (error) {
-    console.error('[Content] Parse error:', error);
-    throw error;
-  }
-}
-
-eventBus.subscribe<ElementPickRequestEvent['data']>(
-  'element.pick.request',
-  (event) => {
-    console.log('[Content] Pick request:', event.data);
-    activatePicker(event.data.fieldId, event.data.fieldType);
-  }
-);
-
-function activatePicker(fieldId: string, fieldType: string): void {
-  if (isPickerActive) deactivatePicker();
-
-  isPickerActive = true;
-  currentFieldId = fieldId;
-  currentFieldType = fieldType;
-  
+function startElementPicking() {
   createOverlay();
-  
-  document.addEventListener('mouseover', handleMouseOver, true);
-  document.addEventListener('mouseout', handleMouseOut, true);
+  document.addEventListener('mouseover', handleMouseOver);
+  document.addEventListener('mouseout', handleMouseOut);
   document.addEventListener('click', handleClick, true);
-  document.addEventListener('keydown', handleKeyDown, true);
-  
-  document.body.style.cursor = 'crosshair';
+  document.addEventListener('keydown', handleEscape);
 }
 
-function deactivatePicker(cancelled = false): void {
-  if (cancelled && currentFieldId) {
-    const event = ParserEventFactory.createElementPickCancelled(currentFieldId);
-    void eventBus.publish(event);
-  }
+function stopElementPicking() {
+  removeOverlay();
+  removeHighlight();
+  document.removeEventListener('mouseover', handleMouseOver);
+  document.removeEventListener('mouseout', handleMouseOut);
+  document.removeEventListener('click', handleClick, true);
+  document.removeEventListener('keydown', handleEscape);
+}
 
-  isPickerActive = false;
-  currentFieldId = null;
-  currentFieldType = null;
-  hoveredElement = null;
-  
+function createOverlay() {
+  if (overlay) return;
+  overlay = document.createElement('div');
+  overlay.id = 'parser-element-picker-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 2147483646;
+    cursor: crosshair;
+    pointer-events: none;
+  `;
+  document.body.appendChild(overlay);
+}
+
+function removeOverlay() {
   if (overlay) {
     overlay.remove();
     overlay = null;
   }
-  
-  document.removeEventListener('mouseover', handleMouseOver, true);
-  document.removeEventListener('mouseout', handleMouseOut, true);
-  document.removeEventListener('click', handleClick, true);
-  document.removeEventListener('keydown', handleKeyDown, true);
-  
-  document.body.style.cursor = '';
 }
 
-function createOverlay(): void {
-  overlay = document.createElement('div');
-  overlay.id = 'parser-config-builder-overlay';
-  overlay.className = 'parser-config-builder-overlay';
-  document.body.appendChild(overlay);
-}
-
-function updateOverlay(element: HTMLElement): void {
-  if (!overlay) return;
+function createHighlight(element: HTMLElement) {
+  removeHighlight();
+  
   const rect = element.getBoundingClientRect();
-  overlay.style.top = `${rect.top + window.scrollY}px`;
-  overlay.style.left = `${rect.left + window.scrollX}px`;
-  overlay.style.width = `${rect.width}px`;
-  overlay.style.height = `${rect.height}px`;
+  highlightedElement = document.createElement('div');
+  highlightedElement.id = 'parser-element-highlight';
+  highlightedElement.style.cssText = `
+    position: fixed;
+    top: ${rect.top}px;
+    left: ${rect.left}px;
+    width: ${rect.width}px;
+    height: ${rect.height}px;
+    border: 2px solid #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    pointer-events: none;
+    z-index: 2147483645;
+    transition: all 0.1s;
+  `;
+  
+  const label = document.createElement('div');
+  label.style.cssText = `
+    position: absolute;
+    top: -28px;
+    left: 0;
+    background: #10b981;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    font-family: system-ui, sans-serif;
+  `;
+  label.textContent = element.tagName.toLowerCase() + (element.className ? '.' + Array.from(element.classList).slice(0, 2).join('.') : '');
+  highlightedElement.appendChild(label);
+  
+  document.body.appendChild(highlightedElement);
 }
 
-function handleMouseOver(event: MouseEvent): void {
-  if (!isPickerActive) return;
-  
-  const target = event.target as HTMLElement;
-  if (!target || target === overlay || target.closest('#parser-config-builder-sidebar-root')) return;
-  
-  hoveredElement = target;
-  updateOverlay(target);
-}
-
-function handleMouseOut(): void {
-  if (!isPickerActive || !overlay) return;
-  hoveredElement = null;
-}
-
-function handleClick(event: MouseEvent): void {
-  if (!isPickerActive || !hoveredElement || !currentFieldId || !currentFieldType) return;
-  
-  const target = event.target as HTMLElement;
-  if (target.closest('#parser-config-builder-sidebar-root')) return;
-  
-  event.preventDefault();
-  event.stopPropagation();
-  
-  const isArrayType = currentFieldType === 'array';
-  const selector = parserService.generateSelector(hoveredElement, isArrayType);
-  
-  const validation = parserService.validateSelector(document, selector, currentFieldType);
-  
-  const pickedEvent = ParserEventFactory.createElementPicked(
-    currentFieldId,
-    selector,
-    validation.previewText || hoveredElement.textContent?.trim().substring(0, 100) || '',
-    validation.elementCount,
-    validation.arrayPreview
-  );
-  
-  void eventBus.publish(pickedEvent);
-  deactivatePicker(false);
-}
-
-function handleKeyDown(event: KeyboardEvent): void {
-  if (event.key === 'Escape' && isPickerActive) {
-    event.preventDefault();
-    event.stopPropagation();
-    deactivatePicker(true);
+function removeHighlight() {
+  if (highlightedElement) {
+    highlightedElement.remove();
+    highlightedElement = null;
   }
 }
 
-export { activatePicker, deactivatePicker };
+function handleMouseOver(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target || target.closest('#parser-config-builder-sidebar-root, #parser-gear-button-root')) return;
+  createHighlight(target);
+}
+
+function handleMouseOut() {
+  removeHighlight();
+}
+
+function handleClick(e: MouseEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const target = e.target as HTMLElement;
+  if (!target || target.closest('#parser-config-builder-sidebar-root, #parser-gear-button-root')) return;
+  
+  if (!currentPickingFieldId) return;
+
+  const isArrayType = currentFieldType === 'array' || currentFieldType === 'custom-object';
+  const selector = parserService.generateSelector(target, isArrayType);
+  
+  const validation = parserService.validateSelector(document, selector, currentFieldType || 'string');
+  
+  const previewText = validation.previewText || target.textContent?.trim().substring(0, 100) || '';
+  const arrayPreview = validation.arrayPreview;
+  
+  eventBus.publish(
+    ParserEventFactory.createElementPicked(
+      currentPickingFieldId,
+      selector,
+      previewText,
+      validation.elementCount,
+      arrayPreview
+    )
+  );
+  
+  stopElementPicking();
+  currentPickingFieldId = null;
+  currentFieldType = null;
+}
+
+function handleEscape(e: KeyboardEvent) {
+  if (e.key === 'Escape' && currentPickingFieldId) {
+    eventBus.publish(
+      ParserEventFactory.createElementPickCancelled(currentPickingFieldId)
+    );
+    stopElementPicking();
+    currentPickingFieldId = null;
+    currentFieldType = null;
+  }
+}
