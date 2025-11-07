@@ -1,5 +1,5 @@
 /**
- * Parser Service v4.3 - Pre-Parse Actions
+ * Parser Service v4.4 - Multiple Selectors
  * @module parser.service
  */
 
@@ -23,36 +23,30 @@ export class ParserService {
   }
 
   async parsePage(pageConfig: PageConfig, subPage: SubPage | undefined, document: Document): Promise<ParsedPageData> {
-    // 1. Выполняем Pre-Parse Actions страницы
     if (pageConfig.preParseActions) {
       await domProtectionService.executeActions(pageConfig.preParseActions);
     }
     
-    // 2. Выполняем Pre-Parse Actions подстраницы
     if (subPage?.preParseActions) {
       await domProtectionService.executeActions(subPage.preParseActions);
     }
     
-    // 3. Создаем snapshot если включен
     const parseDoc = pageConfig.snapshotConfig?.enabled 
       ? domProtectionService.createSnapshot() 
       : document;
     
     const data: Record<string, unknown> = {};
     
-    // 4. Парсим Common Fields
     for (const field of pageConfig.commonFields) {
       data[field.key] = await this.extractFieldWithLoading(parseDoc, field);
     }
     
-    // 5. Парсим SubPage Fields
     if (subPage) {
       for (const field of subPage.fields) {
         data[field.key] = await this.extractFieldWithLoading(parseDoc, field);
       }
     }
     
-    // 6. Восстанавливаем состояние
     domProtectionService.restore();
     
     return { 
@@ -118,51 +112,103 @@ export class ParserService {
     }
   }
 
-  /**
-   * Извлекает поле с Pre-Parse Actions и Load Strategy
-   */
+  validateMultipleSelectors(document: Document, selectors: string[], type: string): {
+    isValid: boolean;
+    totalCount: number;
+    perSelector: Array<{ selector: string; count: number }>;
+    arrayPreview?: string[];
+  } {
+    const results = selectors.map(sel => {
+      const elements = document.querySelectorAll(sel);
+      return { selector: sel, count: elements.length, elements };
+    });
+
+    const totalCount = results.reduce((acc, r) => acc + r.count, 0);
+    
+    if (type === 'array') {
+      const allElements = results.flatMap(r => Array.from(r.elements));
+      const previews = allElements.slice(0, 5).map(el => el.textContent?.trim().substring(0, 50) || '');
+      return {
+        isValid: totalCount > 0,
+        totalCount,
+        perSelector: results.map(r => ({ selector: r.selector, count: r.count })),
+        arrayPreview: previews
+      };
+    }
+
+    return {
+      isValid: totalCount > 0,
+      totalCount,
+      perSelector: results.map(r => ({ selector: r.selector, count: r.count }))
+    };
+  }
+
   private async extractFieldWithLoading(document: Document, field: CustomField): Promise<unknown> {
-    // 1. Выполняем Pre-Parse Actions поля
     if (field.preParseActions) {
       await domProtectionService.executeActions(field.preParseActions);
     }
     
-    // 2. Применяем Load Strategy
     if (field.loadConfig && field.loadConfig.strategy !== 'none') {
       await this.applyFieldLoadStrategy(document, field);
     }
 
-    // 3. Извлекаем данные
-    const { type, selector, arrayItemType } = field;
+    const allSelectors = field.selectors && field.selectors.length > 0 
+      ? field.selectors 
+      : [field.selector];
+
+    const { type, arrayItemType } = field;
     
     switch (type) {
-      case 'string': 
-        return document.querySelector(selector)?.textContent?.trim() || '';
+      case 'string': {
+        for (const selector of allSelectors) {
+          const element = document.querySelector(selector);
+          if (element?.textContent?.trim()) {
+            return element.textContent.trim();
+          }
+        }
+        return '';
+      }
         
       case 'array': {
-        const elements = Array.from(document.querySelectorAll(selector));
+        const allElements: Element[] = [];
+        for (const selector of allSelectors) {
+          const elements = Array.from(document.querySelectorAll(selector));
+          allElements.push(...elements);
+        }
         
         switch (arrayItemType) {
           case 'number':
-            return elements.map(el => parseFloat(el.textContent?.trim().replace(/[^0-9.]/g, '') || '0'));
+            return allElements.map(el => parseFloat(el.textContent?.trim().replace(/[^0-9.]/g, '') || '0'));
           case 'image':
-            return elements.map(el => el.getAttribute('src') || '');
+            return allElements.map(el => el.getAttribute('src') || '');
           case 'url':
-            return elements.map(el => el.getAttribute('href') || '');
+            return allElements.map(el => el.getAttribute('href') || '');
           case 'custom-object':
-            // TODO: парсинг custom objects
-            return elements.map(el => ({ raw: el.textContent?.trim() }));
+            return allElements.map(el => ({ raw: el.textContent?.trim() }));
           default:
-            return elements.map(el => el.textContent?.trim() || '');
+            return allElements.map(el => el.textContent?.trim() || '');
         }
       }
         
       case 'image':
-      case 'url': 
-        return document.querySelector(selector)?.getAttribute(type === 'image' ? 'src' : 'href') || '';
+      case 'url': {
+        for (const selector of allSelectors) {
+          const element = document.querySelector(selector);
+          const attr = element?.getAttribute(type === 'image' ? 'src' : 'href');
+          if (attr) return attr;
+        }
+        return '';
+      }
         
-      case 'number': 
-        return parseFloat(document.querySelector(selector)?.textContent?.trim().replace(/[^0-9.]/g, '') || '0');
+      case 'number': {
+        for (const selector of allSelectors) {
+          const element = document.querySelector(selector);
+          if (element?.textContent) {
+            return parseFloat(element.textContent.trim().replace(/[^0-9.]/g, '') || '0');
+          }
+        }
+        return 0;
+      }
         
       default: 
         return '';
@@ -173,6 +219,12 @@ export class ParserService {
     if (!field.loadConfig) return;
 
     const { strategy, buttonSelector, maxIterations = 5, waitAfterAction = 1000, stopWhenNoChange = true } = field.loadConfig;
+    
+    const primarySelector = (field.selectors && field.selectors.length > 0 && field.selectors[0]) 
+      ? field.selectors[0] 
+      : field.selector;
+
+    if (!primarySelector) return;
 
     switch (strategy) {
       case 'none':
@@ -180,7 +232,7 @@ export class ParserService {
 
       case 'click-expand':
         if (buttonSelector) {
-          const parentElement = document.querySelector(field.selector);
+          const parentElement = document.querySelector(primarySelector);
           if (parentElement) {
             const button = parentElement.querySelector(buttonSelector) as HTMLElement;
             if (button) {
@@ -191,25 +243,38 @@ export class ParserService {
         }
         break;
 
-      case 'infinite-scroll':
+      case 'infinite-scroll': {
         for (let i = 0; i < maxIterations; i++) {
-          const items = document.querySelectorAll(field.selector);
-          if (items.length === 0) break;
+          const allSelectors = field.selectors && field.selectors.length > 0 ? field.selectors : [field.selector];
+          let allItems: Element[] = [];
+          for (const sel of allSelectors) {
+            if (sel) {
+              allItems.push(...Array.from(document.querySelectorAll(sel)));
+            }
+          }
+          
+          if (allItems.length === 0) break;
 
-          const lastItem = items[items.length - 1];
+          const lastItem = allItems[allItems.length - 1];
           if (lastItem) {
             lastItem.scrollIntoView({ behavior: 'smooth', block: 'end' });
           }
 
-          const prevCount = items.length;
+          const prevCount = allItems.length;
           await this.delay(waitAfterAction);
 
           if (stopWhenNoChange) {
-            const newItems = document.querySelectorAll(field.selector);
+            let newItems: Element[] = [];
+            for (const sel of allSelectors) {
+              if (sel) {
+                newItems.push(...Array.from(document.querySelectorAll(sel)));
+              }
+            }
             if (newItems.length === prevCount) break;
           }
         }
         break;
+      }
 
       case 'click-load-more':
         if (buttonSelector) {
@@ -217,12 +282,24 @@ export class ParserService {
             const button = document.querySelector(buttonSelector) as HTMLElement;
             if (!button) break;
 
-            const prevCount = document.querySelectorAll(field.selector).length;
+            const allSelectors = field.selectors && field.selectors.length > 0 ? field.selectors : [field.selector];
+            let prevCount = 0;
+            for (const sel of allSelectors) {
+              if (sel) {
+                prevCount += document.querySelectorAll(sel).length;
+              }
+            }
+
             button.click();
             await this.delay(waitAfterAction);
 
             if (stopWhenNoChange) {
-              const newCount = document.querySelectorAll(field.selector).length;
+              let newCount = 0;
+              for (const sel of allSelectors) {
+                if (sel) {
+                  newCount += document.querySelectorAll(sel).length;
+                }
+              }
               if (newCount === prevCount) break;
             }
           }
@@ -240,17 +317,6 @@ export class ParserService {
         break;
     }
   }
-
-  // private waitForElement(selector: string, timeout: number): Promise<void> {
-  //   return new Promise((resolve, reject) => {
-  //     if (document.querySelector(selector)) { resolve(); return; }
-  //     const observer = new MutationObserver(() => {
-  //       if (document.querySelector(selector)) { observer.disconnect(); resolve(); }
-  //     });
-  //     observer.observe(document.body, { childList: true, subtree: true });
-  //     setTimeout(() => { observer.disconnect(); reject(new Error(`Timeout: ${selector}`)); }, timeout);
-  //   });
-  // }
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));

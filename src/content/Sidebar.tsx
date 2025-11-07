@@ -1,5 +1,5 @@
 /**
- * Sidebar v4.3 - Pre-Parse Actions
+ * Sidebar v4.4 - Fixed Single Selector Hide
  * @module content/Sidebar
  */
 
@@ -48,12 +48,18 @@ const styles = `
   .btn-remove { background: #ef4444; color: white; height: 40px; width: 40px; }
   .btn-add { background: #10b981; color: white; width: 100%; padding: 10px; }
   .btn-sm { padding: 6px 12px; height: 32px; font-size: 12px; }
+  .btn-add-selector { background: #0ea5e9; color: white; border: none; padding: 6px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-top: 6px; width: 100%; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
   .validation { margin-top: 6px; padding: 8px; border-radius: 4px; font-size: 12px; }
   .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; border-left-width: 4px; }
   .load-config-box { background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 6px; padding: 10px; margin-top: 10px; }
   .load-config-title { font-size: 12px; font-weight: 600; color: #0c4a6e; margin-bottom: 8px; cursor: pointer; user-select: none; }
   .array-type-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px; margin-top: 8px; }
+  .selector-item { background: #f0f9ff; border: 1px solid #bae6fd; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  .selector-text { font-family: monospace; font-size: 11px; color: #0c4a6e; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .selector-count { font-size: 10px; color: #0284c7; background: #e0f2fe; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
+  .btn-remove-selector { background: #ef4444; color: white; border: none; width: 20px; height: 20px; border-radius: 3px; cursor: pointer; font-size: 12px; }
+  .multi-selector-box { background: #ecfeff; border: 1px solid #67e8f9; border-radius: 6px; padding: 8px; margin-top: 6px; }
   .page-card { background: #faf5ff; border: 2px solid #e9d5ff; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
   .subpage-card { background: #f0f9ff; border: 2px solid #bae6fd; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
   .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid #e5e7eb; overflow-x: auto; }
@@ -77,8 +83,9 @@ const styles = `
 
 interface FieldState extends CustomField {
   isPicking: boolean;
+  isPickingAddSelector?: boolean;
   isPickingLoadButton?: boolean;
-  validation: { status: string; count: number; arrayPreview?: string[] } | null;
+  validation: { status: string; count: number; arrayPreview?: string[]; perSelector?: Array<{ selector: string; count: number }> } | null;
   isHighlighted?: boolean;
 }
 
@@ -204,25 +211,81 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
   scope: 'common' | 'subpage';
 }) {
   const [showPresets, setShowPresets] = useState(false);
+  const [showMultiSelector, setShowMultiSelector] = useState(false);
   const fieldColor = getFieldColor(fieldIndex);
 
+  const selectors = field.selectors && field.selectors.length > 0 ? field.selectors : [field.selector];
+  const hasMultiple = selectors.length > 1 || showMultiSelector;
+
   const handleTogglePreview = () => {
-    if (!field.selector) return;
+    const allSelectors = field.selectors && field.selectors.length > 0 ? field.selectors : [field.selector];
+    const hasAnySelector = allSelectors.some(s => s);
+    
+    if (!hasAnySelector) return;
     
     if (field.isHighlighted) {
-      clearFieldPreview(field.id);
-      onChange({ isHighlighted: false });
-    } else {
-      const count = highlightField(field.id, field.selector, fieldIndex);
-      const validation = parserService.validateSelector(document, field.selector, field.type);
-      onChange({ 
-        isHighlighted: true,
-        validation: { 
-          status: validation.isValid ? 'valid' : 'invalid', 
-          count, 
-          arrayPreview: validation.arrayPreview 
-        } 
+      // ВСЕГДА очищаем с единым форматом: {fieldId}-sel-{index}
+      allSelectors.forEach((sel, idx) => {
+        if (sel) {
+          clearFieldPreview(`${field.id}-sel-${idx}`);
+        }
       });
+      onChange({ isHighlighted: false, validation: null });
+    } else {
+      // ВСЕГДА подсвечиваем с единым форматом: {fieldId}-sel-{index}
+      if (hasMultiple) {
+        const validation = parserService.validateMultipleSelectors(document, allSelectors.filter(Boolean) as string[], field.type);
+        
+        allSelectors.forEach((sel, idx) => {
+          if (sel) {
+            highlightField(`${field.id}-sel-${idx}`, sel, fieldIndex);
+          }
+        });
+        
+        onChange({ 
+          isHighlighted: true,
+          validation: { 
+            status: validation.isValid ? 'valid' : 'invalid', 
+            count: validation.totalCount,
+            perSelector: validation.perSelector,
+            arrayPreview: validation.arrayPreview 
+          } 
+        });
+      } else {
+        // Единый формат даже для одного селектора!
+        const count = highlightField(`${field.id}-sel-0`, field.selector, fieldIndex);
+        const validation = parserService.validateSelector(document, field.selector, field.type);
+        onChange({ 
+          isHighlighted: true,
+          validation: { 
+            status: validation.isValid ? 'valid' : 'invalid', 
+            count, 
+            arrayPreview: validation.arrayPreview 
+          } 
+        });
+      }
+    }
+  };
+
+  const handleAddSelector = async () => {
+    setShowMultiSelector(true);
+    onChange({ isPickingAddSelector: true });
+    await eventBus.publish(ParserEventFactory.createElementPickRequest(`${field.id}-add-selector`, field.type));
+  };
+
+  const handleRemoveSelector = (index: number) => {
+    const newSelectors = selectors.filter((_, i) => i !== index);
+    
+    // Очищаем подсветку этого селектора
+    if (field.isHighlighted) {
+      clearFieldPreview(`${field.id}-sel-${index}`);
+    }
+    
+    if (newSelectors.length === 1) {
+      onChange({ selector: newSelectors[0], selectors: [] });
+      setShowMultiSelector(false);
+    } else {
+      onChange({ selectors: newSelectors });
     }
   };
 
@@ -305,34 +368,80 @@ function DynamicField({ field, fieldIndex, page, onChange, onRemove, onPick, sco
             </select>
           ) : (
             <div style={{ fontSize: '12px', color: '#ef4444', padding: '6px', background: '#fee2e2', borderRadius: '4px' }}>
-              Create object type first!
+              Create type first!
             </div>
           )}
         </div>
       )}
 
       <div className="group">
-        <label className="label">Selector</label>
-        <div className="row">
-          <input className="input" value={field.selector} onChange={(e) => onChange({ selector: e.target.value })} style={{ flex: 1 }} />
-          <button className={`btn btn-pick ${field.isPicking ? 'active' : ''}`} onClick={onPick} type="button">
-            {field.isPicking ? '...' : 'Pick'}
-          </button>
-          {field.selector && (
-            <button 
-              className="btn btn-preview"
-              style={{ background: field.isHighlighted ? '#f59e0b' : fieldColor }}
-              onClick={handleTogglePreview} 
-              type="button"
-            >
-              {field.isHighlighted ? 'Hide' : 'Show'}
+        <label className="label">
+          Selector{hasMultiple && 's'} {hasMultiple && <span className="badge">{selectors.length}</span>}
+        </label>
+        
+        {!hasMultiple ? (
+          <div className="row">
+            <input className="input" value={field.selector} onChange={(e) => onChange({ selector: e.target.value })} style={{ flex: 1 }} />
+            <button className={`btn btn-pick ${field.isPicking ? 'active' : ''}`} onClick={onPick} type="button">
+              {field.isPicking ? '...' : 'Pick'}
             </button>
-          )}
-          <button className="btn btn-remove" onClick={onRemove} type="button">×</button>
-        </div>
+            {field.selector && (
+              <button 
+                className="btn btn-preview"
+                style={{ background: field.isHighlighted ? '#f59e0b' : fieldColor }}
+                onClick={handleTogglePreview} 
+                type="button"
+              >
+                {field.isHighlighted ? 'Hide' : 'Show'}
+              </button>
+            )}
+            <button className="btn btn-remove" onClick={onRemove} type="button">×</button>
+          </div>
+        ) : (
+          <>
+            <div className="multi-selector-box">
+              {selectors.map((sel, idx) => (
+                <div key={idx} className="selector-item">
+                  <span className="selector-text">{sel}</span>
+                  {field.validation?.perSelector && (
+                    <span className="selector-count">{field.validation.perSelector[idx]?.count || 0}</span>
+                  )}
+                  <button className="btn-remove-selector" onClick={() => handleRemoveSelector(idx)} type="button">×</button>
+                </div>
+              ))}
+            </div>
+            <div className="row" style={{ marginTop: '6px' }}>
+              {selectors.some(s => s) && (
+                <button 
+                  className="btn btn-preview"
+                  style={{ background: field.isHighlighted ? '#f59e0b' : fieldColor, flex: 1 }}
+                  onClick={handleTogglePreview} 
+                  type="button"
+                >
+                  {field.isHighlighted ? 'Hide All' : 'Show All'}
+                </button>
+              )}
+              <button className="btn btn-remove" onClick={onRemove} type="button">×</button>
+            </div>
+          </>
+        )}
+        
+        {field.type === 'array' && (
+          <button className="btn-add-selector" onClick={handleAddSelector} type="button">
+            {field.isPickingAddSelector ? '⏳ Picking...' : '+ Add Selector'}
+          </button>
+        )}
+        
         {field.validation && (
           <div className="validation" style={{ background: `${fieldColor}15`, border: `1px solid ${fieldColor}` }}>
-            {field.validation.count} element(s)
+            Total: {field.validation.count}
+            {field.validation.perSelector && field.validation.perSelector.length > 1 && (
+              <div style={{ fontSize: '10px', marginTop: '4px' }}>
+                {field.validation.perSelector.map((ps, idx) => (
+                  <div key={idx}>#{idx + 1}: {ps.count}</div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -407,7 +516,10 @@ function SubPageEditor({ subPage, totalFieldsBefore, page, onChange, onDelete }:
               page={page}
               onChange={(u) => onChange({ fields: subPage.fields.map(f => f.id === field.id ? { ...f, ...u } : f) })}
               onRemove={() => {
-                if (field.isHighlighted) clearFieldPreview(field.id);
+                if (field.isHighlighted) {
+                  const sels = field.selectors && field.selectors.length > 0 ? field.selectors : [field.selector];
+                  sels.forEach((s, i) => { if (s) clearFieldPreview(`${field.id}-sel-${i}`); });
+                }
                 onChange({ fields: subPage.fields.filter(f => f.id !== field.id) });
               }}
               onPick={async () => {
@@ -534,7 +646,10 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
             page={page}
             onChange={(u) => onChange({ commonFields: page.commonFields.map(field => field.id === f.id ? { ...field, ...u } : field) })} 
             onRemove={() => { 
-              if (f.isHighlighted) clearFieldPreview(f.id); 
+              if (f.isHighlighted) {
+                const sels = f.selectors && f.selectors.length > 0 ? f.selectors : [f.selector];
+                sels.forEach((s, i) => { if (s) clearFieldPreview(`${f.id}-sel-${i}`); });
+              }
               onChange({ commonFields: page.commonFields.filter(field => field.id !== f.id) }); 
             }} 
             onPick={async () => { 
@@ -559,7 +674,12 @@ function PageEditor({ page, onChange, onDelete, currentUrl }: {
             page={page}
             onChange={(u) => onChange({ subPages: page.subPages.map(s => s.id === sp.id ? { ...s, ...u } : s) })}
             onDelete={() => {
-              sp.fields.forEach(f => { if (f.isHighlighted) clearFieldPreview(f.id); });
+              sp.fields.forEach(f => { 
+                if (f.isHighlighted) {
+                  const sels = f.selectors && f.selectors.length > 0 ? f.selectors : [f.selector];
+                  sels.forEach((s, i) => { if (s) clearFieldPreview(`${f.id}-sel-${i}`); });
+                }
+              });
               onChange({ subPages: page.subPages.filter(s => s.id !== sp.id) });
             }}
           />
@@ -596,8 +716,27 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
       setName(config.name);
       setPages(config.pages.map(p => ({ 
         ...p,
-        commonFields: (p.commonFields || p.fields || []).map(f => ({ ...f, isPicking: false, validation: null, isHighlighted: false, isPickingLoadButton: false })),
-        subPages: (p.subPages || []).map(sp => ({ ...sp, fields: sp.fields.map(f => ({ ...f, isPicking: false, validation: null, isHighlighted: false, isPickingLoadButton: false })) })),
+        commonFields: (p.commonFields || p.fields || []).map(f => ({ 
+          ...f, 
+          selectors: f.selectors || [],
+          isPicking: false, 
+          isPickingAddSelector: false,
+          validation: null, 
+          isHighlighted: false, 
+          isPickingLoadButton: false 
+        })),
+        subPages: (p.subPages || []).map(sp => ({ 
+          ...sp, 
+          fields: sp.fields.map(f => ({ 
+            ...f, 
+            selectors: f.selectors || [],
+            isPicking: false,
+            isPickingAddSelector: false,
+            validation: null, 
+            isHighlighted: false, 
+            isPickingLoadButton: false 
+          })) 
+        })),
         fields: [],
         customObjectTypes: [...(p.customObjectTypes || [])]
       })));
@@ -642,6 +781,26 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
             } : f)
           }))
         })));
+      } else if (e.data.fieldId.endsWith('-add-selector')) {
+        const fieldId = e.data.fieldId.replace('-add-selector', '');
+        setPages(prev => prev.map(p => ({
+          ...p,
+          commonFields: p.commonFields.map(f => f.id === fieldId ? {
+            ...f,
+            selectors: [...(f.selectors || [f.selector]).filter(Boolean), e.data.selector],
+            isPickingAddSelector: false,
+            isPicking: false
+          } : f),
+          subPages: p.subPages.map(sp => ({
+            ...sp,
+            fields: sp.fields.map(f => f.id === fieldId ? {
+              ...f,
+              selectors: [...(f.selectors || [f.selector]).filter(Boolean), e.data.selector],
+              isPickingAddSelector: false,
+              isPicking: false
+            } : f)
+          }))
+        })));
       } else {
         setPages(prev => prev.map(p => ({
           ...p,
@@ -676,6 +835,16 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
             fields: sp.fields.map(f => f.id === fieldId ? { ...f, isPickingLoadButton: false } : f)
           }))
         })));
+      } else if (e.data.fieldId.endsWith('-add-selector')) {
+        const fieldId = e.data.fieldId.replace('-add-selector', '');
+        setPages(prev => prev.map(p => ({
+          ...p,
+          commonFields: p.commonFields.map(f => f.id === fieldId ? { ...f, isPickingAddSelector: false, isPicking: false } : f),
+          subPages: p.subPages.map(sp => ({
+            ...sp,
+            fields: sp.fields.map(f => f.id === fieldId ? { ...f, isPickingAddSelector: false, isPicking: false } : f)
+          }))
+        })));
       } else {
         setPages(prev => prev.map(p => ({ 
           ...p,
@@ -694,8 +863,8 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
 
   useEffect(() => {
     const anyPicking = pages.some(p => 
-      p.commonFields.some(f => f.isPicking || f.isPickingLoadButton) ||
-      p.subPages.some(sp => sp.fields.some(f => f.isPicking || f.isPickingLoadButton))
+      p.commonFields.some(f => f.isPicking || f.isPickingLoadButton || f.isPickingAddSelector) ||
+      p.subPages.some(sp => sp.fields.some(f => f.isPicking || f.isPickingLoadButton || f.isPickingAddSelector))
     );
     if (anyPicking) setIsVisible(false);
   }, [pages]);
@@ -707,7 +876,7 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
     const config = { 
       id: existingConfig?.id || crypto.randomUUID(), 
       name, 
-      version: '4.3.0', 
+      version: '4.4.0', 
       targetUrl, 
       pages: pages.map(({ id, name, urlPattern, tabSelector, preParseActions, commonFields, subPages, customObjectTypes }) => ({ 
         id, 
@@ -715,16 +884,16 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
         urlPattern,
         tabSelector,
         preParseActions,
-        commonFields: commonFields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions }) => 
-          ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions })
+        commonFields: commonFields.map(({ id, name, key, type, selector, selectors, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions }) => 
+          ({ id, name, key, type, selector, selectors, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions })
         ),
         subPages: subPages.map(({ id, name, urlPattern, fields, preParseActions }) => ({
           id,
           name,
           urlPattern,
           preParseActions,
-          fields: fields.map(({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions }) => 
-            ({ id, name, key, type, selector, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions })
+          fields: fields.map(({ id, name, key, type, selector, selectors, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions }) => 
+            ({ id, name, key, type, selector, selectors, required, arrayItemType, customObjectTypeId, loadConfig, preParseActions })
           )
         })),
         customObjectTypes,
@@ -756,10 +925,10 @@ function Sidebar({ onClose, initialUrl, initialName }: SidebarProps) {
         </div>
         
         <div className="content">
-          {pages.some(p => p.commonFields.some(f => f.isPicking || f.isPickingLoadButton) || p.subPages.some(sp => sp.fields.some(f => f.isPicking || f.isPickingLoadButton))) && (
+          {pages.some(p => p.commonFields.some(f => f.isPicking || f.isPickingLoadButton || f.isPickingAddSelector) || p.subPages.some(sp => sp.fields.some(f => f.isPicking || f.isPickingLoadButton || f.isPickingAddSelector))) && (
             <div className="picking-hint">Click (ESC = cancel)</div>
           )}
-          <div className="info"><strong>v4.3:</strong> Pre-Parse Actions!</div>
+          <div className="info"><strong>v4.4:</strong> Multiple Selectors!</div>
           <div className="group"><label className="label">Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
           <div style={{ marginTop: '16px' }}>
             <div className="tabs">

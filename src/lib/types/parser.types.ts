@@ -1,5 +1,5 @@
 /**
- * Parser Types v4.3 - Pre-Parse Actions & DOM Snapshot
+ * Parser Types v4.4 - Multiple Selectors
  * @module types/parser.types
  */
 
@@ -13,23 +13,20 @@ export type FieldLoadStrategy =
   | 'click-load-more'
   | 'hover-expand';
 
-/**
- * Действия перед парсингом для подготовки страницы
- */
 export type PreParseActionType = 
-  | 'disable-interactions'   // Отключить все onclick/hover события
-  | 'remove-overlays'        // Удалить модальные окна, popups
-  | 'expand-all'             // Раскрыть все collapsible элементы
-  | 'trigger-hover'          // Триггерить hover на элементах
-  | 'wait-for-element'       // Ждать появления элемента
-  | 'remove-elements'        // Удалить мешающие элементы
-  | 'force-visible';         // Сделать скрытые элементы видимыми
+  | 'disable-interactions'
+  | 'remove-overlays'
+  | 'expand-all'
+  | 'trigger-hover'
+  | 'wait-for-element'
+  | 'remove-elements'
+  | 'force-visible';
 
 export interface PreParseAction {
   type: PreParseActionType;
-  selector?: string;          // Для trigger-hover, remove-elements, wait-for-element
-  timeout?: number;           // Для wait-for-element
-  executeOnce?: boolean;      // Выполнить только один раз при первом парсинге
+  selector?: string;
+  timeout?: number;
+  executeOnce?: boolean;
 }
 
 export interface FieldTransform {
@@ -48,22 +45,30 @@ export interface FieldLoadConfig {
   stopWhenNoChange?: boolean;
 }
 
-/**
- * Snapshot настройки для сохранения состояния DOM
- */
 export interface DOMSnapshotConfig {
-  enabled: boolean;              // Включить snapshot перед парсингом
-  captureSelector?: string;      // Захватить только определенную часть DOM
-  removeInteractive?: boolean;   // Удалить интерактивные обработчики
-  freezeAnimations?: boolean;    // Заморозить анимации
+  enabled: boolean;
+  captureSelector?: string;
+  removeInteractive?: boolean;
+  freezeAnimations?: boolean;
 }
 
+/**
+ * CustomField - теперь поддерживает множественные селекторы
+ */
 export interface CustomField {
   id: string;
   name: string;
   key: string;
   type: FieldType;
+  
+  /**
+   * Селектор или массив селекторов
+   * Для array: все селекторы объединяются в один массив
+   * Для string: берется первый найденный
+   */
   selector: string;
+  selectors?: string[];  // NEW: множественные селекторы
+  
   required: boolean;
   description?: string;
   transform?: FieldTransform;
@@ -71,8 +76,6 @@ export interface CustomField {
   arrayItemType?: ArrayItemType;
   customObjectTypeId?: string;
   loadConfig?: FieldLoadConfig;
-  
-  // Pre-parse actions для этого поля
   preParseActions?: PreParseAction[];
 }
 
@@ -97,8 +100,6 @@ export interface SubPage {
   name: string;
   urlPattern: string;
   fields: CustomField[];
-  
-  // Pre-parse actions для всей подстраницы
   preParseActions?: PreParseAction[];
 }
 
@@ -107,17 +108,11 @@ export interface PageConfig {
   name: string;
   urlPattern: string;
   tabSelector?: string;
-  
   commonFields: readonly CustomField[];
   subPages?: readonly SubPage[];
   customObjectTypes: readonly CustomObjectType[];
-  
-  // Pre-parse actions для всей страницы (выполняются первыми)
   preParseActions?: PreParseAction[];
-  
-  // DOM Snapshot настройки
   snapshotConfig?: DOMSnapshotConfig;
-  
   fields: readonly CustomField[];
   loadStrategy?: any;
 }
